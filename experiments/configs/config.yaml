@@ -1,0 +1,54 @@
+# Red Team vs Blue Team - Training Configuration
+
+# Dataset Configuration
+dataset_path: "data/CICIDS2017/Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv"
+
+# Environment Settings
+environment:
+  n_nodes: 20  # Number of nodes in the network
+  max_steps: 100  # Maximum steps per episode
+  use_real_traffic: true  # Use CICIDS2017 dataset for traffic patterns
+
+# Agent Configuration
+agents:
+  n_red_agents: 4  # Number of red team agents
+  n_blue_agents: 4  # Number of blue team agents
+  
+  # DQN Hyperparameters
+  dqn:
+    learning_rate: 0.001
+    gamma: 0.99  # Discount factor
+    epsilon_start: 1.0
+    epsilon_end: 0.01
+    epsilon_decay: 0.995
+    batch_size: 64
+    target_update_freq: 100
+    hidden_dims: [256, 128, 64]
+    replay_buffer_size: 10000
+
+# MARL Settings
+marl:
+  use_centralized_critic: true
+  coordination_bonus_weight: 0.2
+  competitive_reward_weight: 0.5
+
+# Training Configuration
+training:
+  n_episodes: 5000  # Total training episodes
+  checkpoint_interval: 500  # Save checkpoint every N episodes
+  log_interval: 100  # Log progress every N episodes
+  plot_interval: 500  # Generate plots every N episodes
+  early_stopping_patience: 1000  # Stop if no improvement
+
+# Evaluation Configuration
+evaluation:
+  n_test_episodes: 100
+  use_crewai_demo: true
+
+# Hardware
+device: "cpu"  # or "cuda"
+seed: 42
+
+# Output
+output_dir: "outputs"
+tensorboard_log_dir: "runs"
