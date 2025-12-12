@@ -1,0 +1,25 @@
+{
+  "total_episodes": 10,
+  "successful_defenses": 4,
+  "failed_defenses": 6,
+  "false_positives": 2,
+  "average_reward": -0.23910097060643537,
+  "average_time_to_remediate": 0.0,
+  "detection_rate": 0.5555555555555556,
+  "action_distribution": {
+    "block_ip": 9,
+    "isolate_host": 1
+  },
+  "reward_history": [
+    -1.2793367849244237,
+    -1.2747629036669026,
+    0.8998977198774906,
+    -1.1056379669361442,
+    -0.6092787590485004,
+    -1.0990860871586308,
+    0.7978405657310141,
+    0.9431517863610706,
+    0.9334557444568239,
+    -0.597253020756151
+  ]
+}

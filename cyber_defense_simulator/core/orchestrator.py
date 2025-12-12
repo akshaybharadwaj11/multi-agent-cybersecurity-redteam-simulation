@@ -221,6 +221,9 @@ class CyberDefenseOrchestrator:
                 reward=reward_feedback.reward
             )
             
+            # Decay epsilon after episode
+            self.rl_agent.decay_epsilon()
+            
             # Update metrics
             self._update_metrics(episode)
             

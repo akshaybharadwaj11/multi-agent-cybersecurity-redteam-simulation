@@ -1,0 +1,82 @@
+[
+  {
+    "episode_id": "episode_1_6f1c5e30",
+    "attack_type": "credential_misuse",
+    "severity": "critical",
+    "action_taken": "block_ip",
+    "success": false,
+    "reward": -1.2793367849244237
+  },
+  {
+    "episode_id": "episode_2_b631e256",
+    "attack_type": "privilege_escalation",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": false,
+    "reward": -1.2747629036669026
+  },
+  {
+    "episode_id": "episode_3_4bcb1e2a",
+    "attack_type": "malware_execution",
+    "severity": "low",
+    "action_taken": "block_ip",
+    "success": true,
+    "reward": 0.8998977198774906
+  },
+  {
+    "episode_id": "episode_4_80e74a17",
+    "attack_type": "data_exfiltration",
+    "severity": "low",
+    "action_taken": "block_ip",
+    "success": false,
+    "reward": -1.1056379669361442
+  },
+  {
+    "episode_id": "episode_5_db5c7cf3",
+    "attack_type": "phishing",
+    "severity": "low",
+    "action_taken": "block_ip",
+    "success": false,
+    "reward": -0.6092787590485004
+  },
+  {
+    "episode_id": "episode_6_5db746b0",
+    "attack_type": "lateral_movement",
+    "severity": "critical",
+    "action_taken": "isolate_host",
+    "success": false,
+    "reward": -1.0990860871586308
+  },
+  {
+    "episode_id": "episode_7_019bee09",
+    "attack_type": "data_exfiltration",
+    "severity": "low",
+    "action_taken": "block_ip",
+    "success": true,
+    "reward": 0.7978405657310141
+  },
+  {
+    "episode_id": "episode_8_2404839b",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": true,
+    "reward": 0.9431517863610706
+  },
+  {
+    "episode_id": "episode_9_0c976b1f",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": true,
+    "reward": 0.9334557444568239
+  },
+  {
+    "episode_id": "episode_10_a269e6de",
+    "attack_type": "privilege_escalation",
+    "severity": "low",
+    "action_taken": "block_ip",
+    "success": false,
+    "reward": -0.597253020756151
+  }
+]

@@ -36,7 +36,7 @@ class RAGAgent:
             that helps responders make informed decisions.""",
             verbose=Config.CREW_VERBOSE,
             allow_delegation=False,
-            llm=Config.LLM_MODEL
+            llm=Config.get_llm()
         )
         
         logger.info("Initialized RAG Agent")

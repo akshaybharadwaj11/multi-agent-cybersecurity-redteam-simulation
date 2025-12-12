@@ -220,8 +220,8 @@ class Episode(BaseModel):
     """Single simulation episode"""
     episode_id: str
     episode_number: int
-    attack_scenario: AttackScenario
-    telemetry: TelemetryData
+    attack_scenario: Optional[AttackScenario] = None
+    telemetry: Optional[TelemetryData] = None
     incident_report: Optional[IncidentReport] = None
     rag_context: Optional[RAGContext] = None
     remediation_plan: Optional[RemediationPlan] = None

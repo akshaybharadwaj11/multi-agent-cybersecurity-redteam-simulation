@@ -7,6 +7,7 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 from pathlib import Path
+from langchain_openai import ChatOpenAI
 
 # Load environment variables
 load_dotenv()
@@ -17,11 +18,15 @@ class Config:
     # ========================================================================
     # API Configuration
     # ========================================================================
+    # Support both OpenAI and Groq
+    USE_GROQ: bool = os.getenv("USE_GROQ", "true").lower() == "true"
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.1-70b-versatile")  # Default to Groq model
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "2000"))
+    GROQ_BASE_URL: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
     
     # ========================================================================
     # Vector Store Configuration
@@ -83,8 +88,23 @@ class Config:
     @classmethod
     def validate(cls) -> bool:
         """Validate required configuration"""
-        if not cls.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY is required. Set it in .env file.")
+        if cls.USE_GROQ:
+            if not cls.GROQ_API_KEY:
+                import warnings
+                warnings.warn(
+                    "GROQ_API_KEY is not set. Please set your Groq API key in the .env file. "
+                    "Get your API key from: https://console.groq.com/",
+                    UserWarning
+                )
+        else:
+            if not cls.OPENAI_API_KEY or cls.OPENAI_API_KEY == "your_openai_api_key_here":
+                import warnings
+                warnings.warn(
+                    "OPENAI_API_KEY is not set or is using placeholder value. "
+                    "Please set your actual OpenAI API key in the .env file. "
+                    "Get your API key from: https://platform.openai.com/api-keys",
+                    UserWarning
+                )
         
         # Create necessary directories
         for directory in [cls.DATA_DIR, cls.RUNBOOKS_DIR, cls.MITRE_DIR, 
@@ -96,12 +116,38 @@ class Config:
     @classmethod
     def get_llm_config(cls) -> dict:
         """Get LLM configuration for CrewAI"""
-        return {
+        config = {
             "model": cls.LLM_MODEL,
             "temperature": cls.LLM_TEMPERATURE,
             "max_tokens": cls.LLM_MAX_TOKENS,
-            "api_key": cls.OPENAI_API_KEY
         }
+        if cls.USE_GROQ:
+            config["api_key"] = cls.GROQ_API_KEY
+            config["base_url"] = cls.GROQ_BASE_URL
+        else:
+            config["api_key"] = cls.OPENAI_API_KEY
+        return config
+    
+    @classmethod
+    def get_llm(cls) -> ChatOpenAI:
+        """Get LLM instance for CrewAI agents - supports both Groq and OpenAI"""
+        if cls.USE_GROQ:
+            # Use Groq API with OpenAI-compatible interface
+            return ChatOpenAI(
+                model=cls.LLM_MODEL,
+                temperature=cls.LLM_TEMPERATURE,
+                max_tokens=cls.LLM_MAX_TOKENS,
+                api_key=cls.GROQ_API_KEY,
+                base_url=cls.GROQ_BASE_URL
+            )
+        else:
+            # Use OpenAI
+            return ChatOpenAI(
+                model=cls.LLM_MODEL,
+                temperature=cls.LLM_TEMPERATURE,
+                max_tokens=cls.LLM_MAX_TOKENS,
+                api_key=cls.OPENAI_API_KEY
+            )
     
     @classmethod
     def get_rl_config(cls) -> dict:

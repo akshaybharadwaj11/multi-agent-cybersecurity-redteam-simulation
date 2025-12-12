@@ -31,7 +31,7 @@ class RedTeamAgent:
             detection and response capabilities.""",
             verbose=Config.CREW_VERBOSE,
             allow_delegation=False,
-            llm=Config.LLM_MODEL
+            llm=Config.get_llm()
         )
         
         logger.info("Initialized Red Team Agent")

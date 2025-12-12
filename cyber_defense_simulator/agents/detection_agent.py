@@ -33,7 +33,7 @@ class DetectionAgent:
             framework and can map observed activities to specific techniques.""",
             verbose=Config.CREW_VERBOSE,
             allow_delegation=False,
-            llm=Config.LLM_MODEL
+            llm=Config.get_llm()
         )
         
         # Detection rules for quick filtering

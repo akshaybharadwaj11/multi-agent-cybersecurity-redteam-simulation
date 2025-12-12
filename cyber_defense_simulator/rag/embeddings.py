@@ -24,7 +24,14 @@ class EmbeddingGenerator:
         Args:
             use_openai: Whether to use OpenAI embeddings (requires API key)
         """
-        self.use_openai = use_openai and bool(Config.OPENAI_API_KEY)
+        # Check if OpenAI API key is valid (not placeholder)
+        has_valid_key = (
+            Config.OPENAI_API_KEY and 
+            Config.OPENAI_API_KEY != "your_openai_api_key_here" and
+            len(Config.OPENAI_API_KEY) > 20  # Basic validation
+        )
+        
+        self.use_openai = use_openai and has_valid_key
         
         if self.use_openai:
             openai.api_key = Config.OPENAI_API_KEY
@@ -33,7 +40,7 @@ class EmbeddingGenerator:
         else:
             # Fallback to sentence-transformers
             self.model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Using sentence-transformers: all-MiniLM-L6-v2")
+            logger.info("Using sentence-transformers: all-MiniLM-L6-v2 (OpenAI API key not configured)")
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """

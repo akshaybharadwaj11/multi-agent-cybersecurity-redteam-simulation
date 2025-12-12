@@ -31,7 +31,7 @@ class RemediationAgent:
             Your decisions are grounded in established security runbooks and best practices.""",
             verbose=Config.CREW_VERBOSE,
             allow_delegation=False,
-            llm=Config.LLM_MODEL
+            llm=Config.get_llm()
         )
         
         logger.info("Initialized Remediation Agent")
@@ -180,8 +180,21 @@ class RemediationAgent:
         options = []
         
         for opt_data in data.get('options', []):
+            # Normalize action string to lowercase to match enum values
+            action_str = opt_data['action'].lower().replace(' ', '_')
+            try:
+                action = RemediationAction(action_str)
+            except ValueError:
+                # Try to find matching enum by name (case-insensitive)
+                action_name = opt_data['action'].upper().replace(' ', '_')
+                try:
+                    action = RemediationAction[action_name]
+                except KeyError:
+                    logger.warning(f"Invalid action '{opt_data['action']}', using NOTIFY_TEAM as fallback")
+                    action = RemediationAction.NOTIFY_TEAM
+            
             option = RemediationOption(
-                action=RemediationAction(opt_data['action']),
+                action=action,
                 description=opt_data.get('description', ''),
                 confidence=opt_data.get('confidence', 0.7),
                 estimated_impact=opt_data.get('estimated_impact', 'moderate'),
@@ -192,7 +205,20 @@ class RemediationAgent:
             options.append(option)
         
         recommended_str = data.get('recommended_action')
-        recommended = RemediationAction(recommended_str) if recommended_str else None
+        if recommended_str:
+            # Normalize recommended action
+            rec_action_str = recommended_str.lower().replace(' ', '_')
+            try:
+                recommended = RemediationAction(rec_action_str)
+            except ValueError:
+                rec_action_name = recommended_str.upper().replace(' ', '_')
+                try:
+                    recommended = RemediationAction[rec_action_name]
+                except KeyError:
+                    logger.warning(f"Invalid recommended action '{recommended_str}', using None")
+                    recommended = None
+        else:
+            recommended = None
         
         plan = RemediationPlan(
             incident_id=incident_report.incident_id,

@@ -109,16 +109,24 @@ class VectorStore:
         # Generate query embedding
         query_embedding = self.embedding_generator.embed_query(query)
         
-        # Search
-        results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-            where=filters
-        )
+        # Search - handle filters properly for ChromaDB
+        query_kwargs = {
+            "query_embeddings": [query_embedding],
+            "n_results": top_k * 2  # Get more results to filter
+        }
+        
+        # ChromaDB filter format
+        if filters:
+            where_clause = {}
+            for key, value in filters.items():
+                where_clause[key] = {"$eq": value}
+            query_kwargs["where"] = where_clause
+        
+        results = self.collection.query(**query_kwargs)
         
         # Format results
         formatted_results = []
-        if results['documents'][0]:
+        if results['documents'] and len(results['documents']) > 0 and results['documents'][0]:
             for doc, metadata, distance in zip(
                 results['documents'][0],
                 results['metadatas'][0],
@@ -128,7 +136,8 @@ class VectorStore:
                 similarity = 1 / (1 + distance)
                 formatted_results.append((doc, metadata, similarity))
         
-        return formatted_results
+        # Limit to top_k
+        return formatted_results[:top_k]
     
     def search_by_mitre_technique(
         self,
@@ -145,13 +154,42 @@ class VectorStore:
         Returns:
             List of relevant documents
         """
-        query = f"MITRE ATT&CK {technique_id} detection and remediation"
+        if top_k is None:
+            top_k = 5
         
-        return self.search(
+        # Do semantic search for runbooks
+        query = f"MITRE ATT&CK {technique_id} detection and remediation runbook"
+        
+        # Search all documents first
+        all_results = self.search(
             query=query,
-            top_k=top_k,
-            filters={"type": "runbook"}
+            top_k=top_k * 5,  # Get many results to filter
+            filters=None
         )
+        
+        # Filter to runbooks and check if technique matches
+        runbook_results = []
+        base_technique = technique_id.split('.')[0]  # Get base technique (e.g., T1566 from T1566.001)
+        
+        for doc, metadata, score in all_results:
+            if metadata.get('type') == 'runbook':
+                # Check if this runbook applies to this technique
+                techniques_str = metadata.get('techniques', '')
+                if technique_id in techniques_str or base_technique in techniques_str:
+                    runbook_results.append((doc, metadata, score))
+                    if len(runbook_results) >= top_k:
+                        break
+        
+        # If no exact matches, return top runbooks by relevance
+        if not runbook_results:
+            for doc, metadata, score in all_results:
+                if metadata.get('type') == 'runbook':
+                    runbook_results.append((doc, metadata, score))
+                    if len(runbook_results) >= top_k:
+                        break
+        
+        logger.info(f"Found {len(runbook_results)} runbooks for technique {technique_id}")
+        return runbook_results
     
     def search_similar_incidents(
         self,
