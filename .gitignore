@@ -209,3 +209,4 @@ data/
 outputs/
 .DS_Store
 .env
+simulation.log

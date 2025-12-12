@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Literal
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict
+from pydantic import BaseModel, Field
+from typing import Literal
 
 # ============================================================================
 # Enums
@@ -69,7 +72,7 @@ class LogEntry(BaseModel):
     source: str = Field(..., description="Log source (system, auth, network, etc.)")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     message: str
-    metadata: Dict[str, any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class TelemetryData(BaseModel):
     """Collection of telemetry from various sources"""
@@ -104,7 +107,7 @@ class IncidentReport(BaseModel):
     anomalies: List[Anomaly] = Field(default_factory=list)
     mitre_techniques: List[str] = Field(default_factory=list)
     affected_assets: List[str] = Field(default_factory=list)
-    timeline: List[Dict[str, any]] = Field(default_factory=list)
+    timeline: List[Dict[str, Any]] = Field(default_factory=list)
 
 # ============================================================================
 # RAG Models
@@ -115,7 +118,7 @@ class ThreatIntelligence(BaseModel):
     source: str = Field(..., description="Source of intelligence")
     content: str = Field(..., description="Intelligence content")
     relevance_score: float = Field(..., ge=0.0, le=1.0)
-    metadata: Dict[str, any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class Runbook(BaseModel):
     """Security runbook"""
@@ -132,7 +135,7 @@ class RAGContext(BaseModel):
     incident_id: str
     runbooks: List[Runbook] = Field(default_factory=list)
     threat_intel: List[ThreatIntelligence] = Field(default_factory=list)
-    similar_incidents: List[Dict[str, any]] = Field(default_factory=list)
+    similar_incidents: List[Dict[str, Any]] = Field(default_factory=list)
     retrieved_at: datetime = Field(default_factory=datetime.now)
 
 # ============================================================================
