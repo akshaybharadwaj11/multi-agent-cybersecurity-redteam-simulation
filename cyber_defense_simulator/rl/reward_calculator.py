@@ -1,0 +1,247 @@
+"""
+Reward Function for RL Agent
+Calculates rewards based on remediation outcomes
+"""
+
+import logging
+from typing import Dict
+
+from core.data_models import Outcome, RewardFeedback
+from core.config import Config
+
+logger = logging.getLogger(__name__)
+
+
+class RewardCalculator:
+    """
+    Calculates rewards for RL agent based on remediation outcomes
+    
+    Reward components:
+    - Success bonus: +1.0 if attack contained
+    - Failure penalty: -1.0 if attack succeeded
+    - False positive penalty: -0.5 if no real threat
+    - Collateral damage penalty: -0.3 if legitimate services affected
+    - Time penalty: Small penalty for slow response
+    """
+    
+    def __init__(
+        self,
+        reward_success: float = None,
+        reward_failure: float = None,
+        reward_false_positive: float = None,
+        reward_collateral_damage: float = None,
+        reward_uncertainty: float = None,
+        time_penalty_factor: float = 0.01
+    ):
+        """
+        Initialize reward calculator
+        
+        Args:
+            reward_success: Reward for successful containment
+            reward_failure: Penalty for failed containment
+            reward_false_positive: Penalty for false positive
+            reward_collateral_damage: Penalty for collateral damage
+            reward_uncertainty: Reward for uncertain outcomes
+            time_penalty_factor: Penalty per minute of response time
+        """
+        config = Config.get_reward_config()
+        
+        self.reward_success = reward_success or config['success']
+        self.reward_failure = reward_failure or config['failure']
+        self.reward_false_positive = reward_false_positive or config['false_positive']
+        self.reward_collateral_damage = reward_collateral_damage or config['collateral_damage']
+        self.reward_uncertainty = reward_uncertainty or config['uncertainty']
+        self.time_penalty_factor = time_penalty_factor
+        
+        logger.info("Initialized RewardCalculator")
+        logger.info(f"Success: {self.reward_success}, Failure: {self.reward_failure}")
+    
+    def calculate_reward(self, outcome: Outcome) -> RewardFeedback:
+        """
+        Calculate reward based on outcome
+        
+        Args:
+            outcome: Outcome of remediation action
+            
+        Returns:
+            RewardFeedback with total reward and components
+        """
+        components = {}
+        
+        # Base reward based on primary outcome
+        if outcome.false_positive:
+            # False alarm - penalize but not as much as failure
+            base_reward = self.reward_false_positive
+            components['false_positive'] = base_reward
+            
+        elif outcome.success and outcome.attack_contained:
+            # Successful containment - maximum reward
+            base_reward = self.reward_success
+            components['success'] = base_reward
+            
+        elif not outcome.success:
+            # Failed to stop attack - maximum penalty
+            base_reward = self.reward_failure
+            components['failure'] = base_reward
+            
+        else:
+            # Uncertain outcome
+            base_reward = self.reward_uncertainty
+            components['uncertainty'] = base_reward
+        
+        # Additional penalties
+        total_reward = base_reward
+        
+        # Collateral damage penalty
+        if outcome.collateral_damage:
+            damage_penalty = self.reward_collateral_damage
+            total_reward += damage_penalty
+            components['collateral_damage'] = damage_penalty
+        
+        # Time penalty (encourage faster response)
+        time_penalty = -self.time_penalty_factor * outcome.time_to_remediate
+        total_reward += time_penalty
+        components['time_penalty'] = time_penalty
+        
+        # Create feedback
+        feedback = RewardFeedback(
+            outcome=outcome,
+            reward=total_reward,
+            components=components
+        )
+        
+        logger.debug(
+            f"Reward: {total_reward:.3f} | "
+            f"Success: {outcome.success} | "
+            f"FP: {outcome.false_positive} | "
+            f"Collateral: {outcome.collateral_damage}"
+        )
+        
+        return feedback
+    
+    def get_reward_breakdown(self, feedback: RewardFeedback) -> str:
+        """
+        Get human-readable reward breakdown
+        
+        Args:
+            feedback: RewardFeedback object
+            
+        Returns:
+            Formatted string explaining reward
+        """
+        lines = [f"Total Reward: {feedback.reward:.3f}"]
+        lines.append("\nComponents:")
+        
+        for component, value in feedback.components.items():
+            lines.append(f"  {component}: {value:.3f}")
+        
+        return "\n".join(lines)
+    
+    def compute_expected_reward(
+        self,
+        success_prob: float,
+        false_positive_prob: float = 0.0,
+        collateral_damage_prob: float = 0.0,
+        avg_time: float = 10.0
+    ) -> float:
+        """
+        Compute expected reward for decision analysis
+        
+        Args:
+            success_prob: Probability of success
+            false_positive_prob: Probability of false positive
+            collateral_damage_prob: Probability of collateral damage
+            avg_time: Average time to remediate
+            
+        Returns:
+            Expected reward value
+        """
+        expected = 0.0
+        
+        # Success case
+        expected += success_prob * self.reward_success
+        
+        # Failure case
+        expected += (1 - success_prob - false_positive_prob) * self.reward_failure
+        
+        # False positive case
+        expected += false_positive_prob * self.reward_false_positive
+        
+        # Collateral damage
+        expected += collateral_damage_prob * self.reward_collateral_damage
+        
+        # Time penalty
+        expected += -self.time_penalty_factor * avg_time
+        
+        return expected
+
+
+def simulate_outcome(
+    action_taken: str,
+    incident_severity: str,
+    attack_type: str,
+    confidence: float
+) -> Outcome:
+    """
+    Simulate outcome based on action and context
+    
+    This is a simplified simulator - in real system would interact with actual environment
+    
+    Args:
+        action_taken: Remediation action
+        incident_severity: Severity level
+        attack_type: Type of attack
+        confidence: Detection confidence
+        
+    Returns:
+        Simulated outcome
+    """
+    import random
+    from core.data_models import RemediationAction
+    
+    # Base success probability
+    success_prob = 0.5
+    
+    # Adjust based on severity and action appropriateness
+    severity_weights = {"low": 0.9, "medium": 0.7, "high": 0.5, "critical": 0.3}
+    success_prob = severity_weights.get(incident_severity, 0.5)
+    
+    # Adjust based on action type
+    aggressive_actions = [
+        RemediationAction.ISOLATE_HOST.value,
+        RemediationAction.KILL_PROCESS.value,
+        RemediationAction.BLOCK_IP.value
+    ]
+    
+    if action_taken in aggressive_actions:
+        success_prob += 0.2
+    
+    # Adjust based on confidence
+    success_prob *= confidence
+    
+    # Determine outcome
+    success = random.random() < success_prob
+    
+    # False positive more likely with low confidence
+    false_positive = not success and (random.random() < (1 - confidence))
+    
+    # Collateral damage more likely with aggressive actions
+    collateral_damage = success and action_taken in aggressive_actions and (random.random() < 0.2)
+    
+    # Attack contained if successful
+    attack_contained = success
+    
+    # Random response time (5-30 minutes)
+    time_to_remediate = random.uniform(5.0, 30.0)
+    
+    outcome = Outcome(
+        incident_id="simulated",
+        action_taken=RemediationAction(action_taken),
+        success=success,
+        false_positive=false_positive,
+        collateral_damage=collateral_damage,
+        attack_contained=attack_contained,
+        time_to_remediate=time_to_remediate
+    )
+    
+    return outcome

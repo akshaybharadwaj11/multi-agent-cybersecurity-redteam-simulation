@@ -208,3 +208,4 @@ __marimo__/
 data/
 outputs/
 .DS_Store
+.env
