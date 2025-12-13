@@ -39,12 +39,12 @@ class Config:
     # ========================================================================
     # RL Configuration
     # ========================================================================
-    RL_LEARNING_RATE: float = float(os.getenv("RL_LEARNING_RATE", "0.05"))  # Reduced from 0.1 for stability
-    RL_EPSILON: float = float(os.getenv("RL_EPSILON", "0.2"))  # Increased from 0.1 for more exploration
-    RL_EPSILON_DECAY: float = float(os.getenv("RL_EPSILON_DECAY", "0.998"))  # Slower decay for more exploration
-    RL_MIN_EPSILON: float = float(os.getenv("RL_MIN_EPSILON", "0.15"))  # Higher min for continued exploration (increased from 0.05)
+    RL_LEARNING_RATE: float = float(os.getenv("RL_LEARNING_RATE", "0.08"))  # Increased from 0.05 for faster learning
+    RL_EPSILON: float = float(os.getenv("RL_EPSILON", "1.0"))  # Start from 1.0 (100% exploration) for proper decay
+    RL_EPSILON_DECAY: float = float(os.getenv("RL_EPSILON_DECAY", "0.999"))  # Slower decay (0.999) to allow visible decay from 1.0
+    RL_MIN_EPSILON: float = float(os.getenv("RL_MIN_EPSILON", "0.15"))  # Higher min for continued exploration
     RL_DISCOUNT_FACTOR: float = float(os.getenv("RL_DISCOUNT_FACTOR", "0.95"))
-    RL_Q_INIT: float = float(os.getenv("RL_Q_INIT", "0.1"))  # Optimistic initialization (was 0.0)
+    RL_Q_INIT: float = float(os.getenv("RL_Q_INIT", "0.2"))  # More optimistic initialization (was 0.1)
     
     # ========================================================================
     # Simulation Configuration
@@ -56,11 +56,13 @@ class Config:
     # ========================================================================
     # Reward Function Configuration
     # ========================================================================
-    REWARD_SUCCESS: float = float(os.getenv("REWARD_SUCCESS", "1.0"))
-    REWARD_FAILURE: float = float(os.getenv("REWARD_FAILURE", "-1.0"))
-    REWARD_FALSE_POSITIVE: float = float(os.getenv("REWARD_FALSE_POSITIVE", "-0.5"))
-    REWARD_COLLATERAL_DAMAGE: float = float(os.getenv("REWARD_COLLATERAL_DAMAGE", "-0.3"))
+    REWARD_SUCCESS: float = float(os.getenv("REWARD_SUCCESS", "1.5"))  # Increased from 1.0 for better learning
+    REWARD_FAILURE: float = float(os.getenv("REWARD_FAILURE", "-0.8"))  # Reduced penalty for exploration
+    REWARD_FALSE_POSITIVE: float = float(os.getenv("REWARD_FALSE_POSITIVE", "-0.4"))  # Reduced penalty
+    REWARD_COLLATERAL_DAMAGE: float = float(os.getenv("REWARD_COLLATERAL_DAMAGE", "-0.10"))  # Further reduced
     REWARD_UNCERTAINTY: float = float(os.getenv("REWARD_UNCERTAINTY", "0.0"))
+    REWARD_SPEED_BONUS: float = float(os.getenv("REWARD_SPEED_BONUS", "0.3"))  # Increased speed bonus
+    REWARD_TIME_PENALTY_FACTOR: float = float(os.getenv("REWARD_TIME_PENALTY_FACTOR", "0.003"))  # Further reduced
     
     # ========================================================================
     # Paths

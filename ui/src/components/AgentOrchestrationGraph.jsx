@@ -216,6 +216,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
   const lastEpisodeRef = useRef(null)
   const updateInProgressRef = useRef(false)
   const containerRef = useRef(null)
+  const [containerReady, setContainerReady] = useState(false)
 
   // Orchestrator and Agent definitions
   // Orchestrator is in the center, agents are arranged around it
@@ -226,9 +227,10 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
     icon: Network,
     color: '#6366f1',
     description: 'Coordinates and calls agents in sequence to execute the simulation workflow',
-    position: { x: 600, y: 250 },
+    position: { x: 550, y: 250 },
   }
 
+  // Better organized layout: Top row (input), Center (orchestrator), Bottom row (output)
   const agents = [
     {
       id: 'red-team',
@@ -237,7 +239,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
       icon: User,
       color: '#ef4444',
       description: 'Generates realistic cyberattack scenarios using MITRE ATT&CK framework',
-      position: { x: 0, y: 0 },
+      position: { x: 100, y: 50 },
     },
     {
       id: 'telemetry',
@@ -246,7 +248,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
       icon: FileText,
       color: '#3b82f6',
       description: 'Creates synthetic system logs based on attack scenario',
-      position: { x: 300, y: 0 },
+      position: { x: 400, y: 50 },
     },
     {
       id: 'detection',
@@ -255,7 +257,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
       icon: Search,
       color: '#f59e0b',
       description: 'Analyzes telemetry using LLM to detect security incidents',
-      position: { x: 900, y: 0 },
+      position: { x: 700, y: 50 },
     },
     {
       id: 'rag',
@@ -264,7 +266,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
       icon: Brain,
       color: '#8b5cf6',
       description: 'Retrieves threat intelligence and runbooks from knowledge base',
-      position: { x: 1200, y: 0 },
+      position: { x: 1000, y: 50 },
     },
     {
       id: 'remediation',
@@ -273,7 +275,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
       icon: Shield,
       color: '#10b981',
       description: 'Generates remediation action recommendations based on incident and context',
-      position: { x: 0, y: 500 },
+      position: { x: 100, y: 450 },
     },
     {
       id: 'rl-agent',
@@ -282,7 +284,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
       icon: Zap,
       color: '#ec4899',
       description: 'Selects optimal action using reinforcement learning (Q-learning)',
-      position: { x: 300, y: 500 },
+      position: { x: 400, y: 450 },
     },
     {
       id: 'outcome',
@@ -291,7 +293,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
       icon: Activity,
       color: '#06b6d4',
       description: 'Simulates action outcome and calculates reward for RL learning',
-      position: { x: 900, y: 500 },
+      position: { x: 700, y: 450 },
     },
   ]
 
@@ -334,60 +336,62 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
 
     const initialNodes = [orchestratorNode, ...agentNodes]
 
-    // Edges showing orchestrator calling agents in sequence
+    // Edges with better routing using smoothstep
     const initialEdges = [
-      // Orchestrator calls Red Team
+      // Orchestrator calls Red Team (top-left)
       {
         id: 'e1',
         source: 'orchestrator',
         target: 'red-team',
-        type: 'default',
+        type: 'smoothstep',
         label: '1. Call Red Team',
         labelStyle: { fill: '#6366f1', fontWeight: 600, fontSize: 12 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#c7d2fe', strokeWidth: 2.5, opacity: 0.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#c7d2fe', width: 20, height: 20 },
+        style: { stroke: '#6366f1', strokeWidth: 3, opacity: 0.7 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1', width: 22, height: 22 },
       },
-      // Red Team output flows to Telemetry
+      // Red Team output flows to Telemetry (horizontal)
       {
         id: 'e2',
         source: 'red-team',
         target: 'telemetry',
+        type: 'smoothstep',
         label: 'Attack Scenario',
         labelStyle: { fill: '#ef4444', fontWeight: 600, fontSize: 11 },
-        labelBgStyle: { fill: '#ffffff', fillOpacity: 0.8 },
+        labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
+        labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#ef4444', strokeWidth: 2.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#ef4444', width: 15, height: 15 },
+        style: { stroke: '#ef4444', strokeWidth: 2.5, opacity: 0.8 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#ef4444', width: 18, height: 18 },
       },
       // Orchestrator calls Telemetry
       {
         id: 'e3',
         source: 'orchestrator',
         target: 'telemetry',
-        type: 'default',
+        type: 'smoothstep',
         label: '2. Call Telemetry',
         labelStyle: { fill: '#6366f1', fontWeight: 600, fontSize: 12 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#c7d2fe', strokeWidth: 2.5, opacity: 0.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#c7d2fe', width: 20, height: 20 },
+        style: { stroke: '#6366f1', strokeWidth: 3, opacity: 0.7 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1', width: 22, height: 22 },
       },
-      // Telemetry output flows to Detection
+      // Telemetry output flows to Detection (horizontal)
       {
         id: 'e4',
         source: 'telemetry',
         target: 'detection',
-        type: 'default',
+        type: 'smoothstep',
         label: 'System Logs',
         labelStyle: { fill: '#3b82f6', fontWeight: 600, fontSize: 11 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#3b82f6', strokeWidth: 2, opacity: 0.4 },
+        style: { stroke: '#3b82f6', strokeWidth: 2.5, opacity: 0.7 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6', width: 18, height: 18 },
       },
       // Orchestrator calls Detection
@@ -395,27 +399,27 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
         id: 'e5',
         source: 'orchestrator',
         target: 'detection',
-        type: 'default',
+        type: 'smoothstep',
         label: '3. Call Detection',
         labelStyle: { fill: '#6366f1', fontWeight: 600, fontSize: 12 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#c7d2fe', strokeWidth: 2.5, opacity: 0.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#c7d2fe', width: 20, height: 20 },
+        style: { stroke: '#6366f1', strokeWidth: 3, opacity: 0.7 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1', width: 22, height: 22 },
       },
-      // Detection output flows to RAG
+      // Detection output flows to RAG (horizontal)
       {
         id: 'e6',
         source: 'detection',
         target: 'rag',
-        type: 'default',
+        type: 'smoothstep',
         label: 'Incident Report',
         labelStyle: { fill: '#f59e0b', fontWeight: 600, fontSize: 11 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#f59e0b', strokeWidth: 2, opacity: 0.4 },
+        style: { stroke: '#f59e0b', strokeWidth: 2.5, opacity: 0.7 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b', width: 18, height: 18 },
       },
       // Orchestrator calls RAG
@@ -423,27 +427,27 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
         id: 'e7',
         source: 'orchestrator',
         target: 'rag',
-        type: 'default',
+        type: 'smoothstep',
         label: '4. Call RAG',
         labelStyle: { fill: '#6366f1', fontWeight: 600, fontSize: 12 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#c7d2fe', strokeWidth: 2.5, opacity: 0.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#c7d2fe', width: 20, height: 20 },
+        style: { stroke: '#6366f1', strokeWidth: 3, opacity: 0.7 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1', width: 22, height: 22 },
       },
-      // RAG output flows to Remediation
+      // RAG output flows to Remediation (diagonal down-left)
       {
         id: 'e8',
         source: 'rag',
         target: 'remediation',
-        type: 'default',
+        type: 'smoothstep',
         label: 'RAG Context',
         labelStyle: { fill: '#8b5cf6', fontWeight: 600, fontSize: 11 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#8b5cf6', strokeWidth: 2, opacity: 0.4 },
+        style: { stroke: '#8b5cf6', strokeWidth: 2.5, opacity: 0.7 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#8b5cf6', width: 18, height: 18 },
       },
       // Orchestrator calls Remediation
@@ -451,27 +455,27 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
         id: 'e9',
         source: 'orchestrator',
         target: 'remediation',
-        type: 'default',
+        type: 'smoothstep',
         label: '5. Call Remediation',
         labelStyle: { fill: '#6366f1', fontWeight: 600, fontSize: 12 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#c7d2fe', strokeWidth: 2.5, opacity: 0.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#c7d2fe', width: 20, height: 20 },
+        style: { stroke: '#6366f1', strokeWidth: 3, opacity: 0.7 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1', width: 22, height: 22 },
       },
-      // Remediation output flows to RL Agent
+      // Remediation output flows to RL Agent (horizontal)
       {
         id: 'e10',
         source: 'remediation',
         target: 'rl-agent',
-        type: 'default',
+        type: 'smoothstep',
         label: 'Action Options',
         labelStyle: { fill: '#10b981', fontWeight: 600, fontSize: 11 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#10b981', strokeWidth: 2, opacity: 0.4 },
+        style: { stroke: '#10b981', strokeWidth: 2.5, opacity: 0.7 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#10b981', width: 18, height: 18 },
       },
       // Orchestrator calls RL Agent
@@ -479,27 +483,27 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
         id: 'e11',
         source: 'orchestrator',
         target: 'rl-agent',
-        type: 'default',
+        type: 'smoothstep',
         label: '6. Call RL Agent',
         labelStyle: { fill: '#6366f1', fontWeight: 600, fontSize: 12 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#c7d2fe', strokeWidth: 2.5, opacity: 0.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#c7d2fe', width: 20, height: 20 },
+        style: { stroke: '#6366f1', strokeWidth: 3, opacity: 0.7 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1', width: 22, height: 22 },
       },
-      // RL Agent output flows to Outcome
+      // RL Agent output flows to Outcome (horizontal)
       {
         id: 'e12',
         source: 'rl-agent',
         target: 'outcome',
-        type: 'default',
+        type: 'smoothstep',
         label: 'Selected Action',
         labelStyle: { fill: '#ec4899', fontWeight: 600, fontSize: 11 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#ec4899', strokeWidth: 2, opacity: 0.4 },
+        style: { stroke: '#ec4899', strokeWidth: 2.5, opacity: 0.7 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#ec4899', width: 18, height: 18 },
       },
       // Orchestrator calls Outcome
@@ -507,41 +511,41 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
         id: 'e13',
         source: 'orchestrator',
         target: 'outcome',
-        type: 'default',
+        type: 'smoothstep',
         label: '7. Call Outcome',
         labelStyle: { fill: '#6366f1', fontWeight: 600, fontSize: 12 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#c7d2fe', strokeWidth: 2.5, opacity: 0.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#c7d2fe', width: 20, height: 20 },
+        style: { stroke: '#6366f1', strokeWidth: 3, opacity: 0.7 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1', width: 22, height: 22 },
       },
-      // Outcome feedback to RL Agent (learning loop)
+      // Outcome feedback to RL Agent (learning loop - curved back)
       {
         id: 'e14',
         source: 'outcome',
         target: 'rl-agent',
-        type: 'default',
+        type: 'smoothstep',
         label: 'Reward Feedback',
         labelStyle: { fill: '#10b981', fontWeight: 600, fontSize: 11 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#10b981', strokeWidth: 2, strokeDasharray: '5,5', opacity: 0.4 },
+        style: { stroke: '#10b981', strokeWidth: 2.5, strokeDasharray: '5,5', opacity: 0.6 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#10b981', width: 18, height: 18 },
       },
-      // Outcome feedback to Orchestrator
+      // Outcome feedback to Orchestrator (up)
       {
         id: 'e15',
         source: 'outcome',
         target: 'orchestrator',
-        type: 'default',
+        type: 'smoothstep',
         label: 'Episode Complete',
         labelStyle: { fill: '#06b6d4', fontWeight: 600, fontSize: 11 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
         labelBgPadding: [4, 4],
         animated: false,
-        style: { stroke: '#06b6d4', strokeWidth: 2, strokeDasharray: '5,5', opacity: 0.4 },
+        style: { stroke: '#06b6d4', strokeWidth: 2.5, strokeDasharray: '5,5', opacity: 0.6 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#06b6d4', width: 18, height: 18 },
       },
     ]
@@ -747,6 +751,47 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
     }
   }, [initializeGraph])
 
+  // Wait for container to be ready with dimensions
+  useEffect(() => {
+    if (!containerRef.current) return
+    
+    let timer1, timer2
+    
+    const checkReady = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          setContainerReady(true)
+          return true
+        }
+      }
+      return false
+    }
+    
+    // Try immediately
+    if (checkReady()) return
+    
+    // Try after a short delay
+    timer1 = setTimeout(() => {
+      if (checkReady()) return
+      
+      // Try after animation frame
+      requestAnimationFrame(() => {
+        if (!checkReady()) {
+          // Final fallback - set ready anyway after delay
+          timer2 = setTimeout(() => {
+            setContainerReady(true)
+          }, 200)
+        }
+      })
+    }, 50)
+    
+    return () => {
+      if (timer1) clearTimeout(timer1)
+      if (timer2) clearTimeout(timer2)
+    }
+  }, [])
+
   // Monitor simulation/episode progress
   useEffect(() => {
     if (!simulationId && !episodeNumber) return
@@ -790,7 +835,7 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
           display: 'block'
         }}
       >
-        {nodes.length > 0 && (
+        {nodes.length > 0 && containerReady && (
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -823,8 +868,8 @@ const AgentOrchestrationGraph = ({ simulationId = null, episodeNumber = null }) 
         />
         </ReactFlow>
         )}
-        {nodes.length === 0 && (
-          <div className="flex items-center justify-center h-full">
+        {(!nodes.length || !containerReady) && (
+          <div className="flex items-center justify-center h-full" style={{ minHeight: '732px' }}>
             <div className="text-gray-500">Initializing graph...</div>
           </div>
         )}

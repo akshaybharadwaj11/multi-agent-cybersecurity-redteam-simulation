@@ -55,12 +55,35 @@ const Logs = () => {
           }}
         />
       ) : (
-        <AgentLogs 
-          agent={null} 
-          autoRefresh={true}
-          filterBySimulationId={selectedStreamId}
-          key={selectedStreamId || 'all'} // Force re-render when filter changes
-        />
+        <div className="space-y-4">
+          {selectedStreamId && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="text-sm font-medium text-blue-900">
+                  Filtering logs for simulation:
+                </span>
+                <code className="text-sm font-mono bg-blue-100 px-3 py-1 rounded text-blue-800">
+                  {selectedStreamId === 'system' ? 'System Logs' : selectedStreamId.replace('sim_', 'Simulation ').replace(/_/g, ' ')}
+                </code>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedStreamId(null)
+                  setView('streams')
+                }}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Clear Filter
+              </button>
+            </div>
+          )}
+          <AgentLogs 
+            agent={null} 
+            autoRefresh={true}
+            filterBySimulationId={selectedStreamId}
+            key={selectedStreamId || 'all'} // Force re-render when filter changes
+          />
+        </div>
       )}
     </div>
   )

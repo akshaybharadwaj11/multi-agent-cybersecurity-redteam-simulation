@@ -129,6 +129,7 @@ class ContextualBandit:
         self.epsilon_decay = 0.99  # VERY slow decay
         self.min_epsilon = 0.15  # HIGHER minimum
         self.q_init = 0.7  # VERY optimistic
+        self.discount_factor = 0.95  # For compatibility (not used in bandit, but API expects it)
         
         self.q_table: Dict[str, Dict[str, float]] = {}
         self.episode_count = 0
@@ -302,7 +303,8 @@ class ContextualBandit:
                 "initial_epsilon": self.initial_epsilon,
                 "epsilon_decay": self.epsilon_decay,
                 "min_epsilon": self.min_epsilon,
-                "q_init": self.q_init
+                "q_init": self.q_init,
+                "discount_factor": self.discount_factor
             }
         }
         
@@ -327,6 +329,9 @@ class ContextualBandit:
             min_epsilon=config['min_epsilon'],
             q_init=config['q_init']
         )
+        
+        # Set discount_factor if present in config, otherwise use default
+        agent.discount_factor = config.get('discount_factor', 0.95)
         
         agent.q_table = state['q_table']
         agent.episode_count = state['episode_count']

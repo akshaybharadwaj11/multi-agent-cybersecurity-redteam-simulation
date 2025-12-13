@@ -45,7 +45,18 @@ class VectorStore:
                 embedding_function=None  # We'll handle embeddings manually
             )
             logger.info(f"Loaded existing collection: {collection_name}")
-        except Exception:
+        except Exception as e:
+            # If there's a schema error, delete and recreate the collection
+            error_msg = str(e).lower()
+            if "no such column" in error_msg or "collections.topic" in error_msg or "schema" in error_msg:
+                logger.warning(f"Database schema issue detected: {e}. Resetting collection...")
+                try:
+                    # Try to delete the collection if it exists
+                    self.client.delete_collection(name=collection_name)
+                    logger.info(f"Deleted corrupted collection: {collection_name}")
+                except Exception:
+                    pass  # Collection might not exist
+            # Create a new collection
             self.collection = self.client.create_collection(
                 name=collection_name,
                 metadata={"description": "Cyber defense knowledge base"}

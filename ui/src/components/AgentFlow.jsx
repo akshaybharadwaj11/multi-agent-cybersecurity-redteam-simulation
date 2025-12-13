@@ -158,26 +158,76 @@ const AgentFlow = ({ simulationId = null, onSimulationStart = null }) => {
     setEpisodeData(null)
     
     try {
+      // Ensure episodes is a valid number - extract primitive value only
+      let episodeCount = numEpisodes
+      if (episodes !== undefined && episodes !== null) {
+        if (typeof episodes === 'number') {
+          episodeCount = episodes
+        } else if (typeof episodes === 'string') {
+          episodeCount = parseInt(episodes, 10) || numEpisodes
+        } else {
+          // If it's an object (like event), ignore it and use default
+          episodeCount = numEpisodes
+        }
+      }
+      
+      // Create a completely isolated config object with only primitives
+      // Build it piece by piece to avoid any object references
+      const numEp = Math.max(1, Math.floor(Number(episodeCount)))
+      const attackTypes = ['phishing'] // New array, not a reference
+      const quickTest = false
+      
+      const cleanConfig = {
+        num_episodes: numEp,
+        attack_types: attackTypes,
+        quick_test: quickTest,
+      }
+      
+      // Verify it can be stringified (no circular refs)
+      try {
+        JSON.stringify(cleanConfig)
+      } catch (stringifyError) {
+        console.error('[AgentFlow] Config cannot be stringified:', stringifyError)
+        throw new Error('Invalid configuration: contains circular references')
+      }
+      
       // Actually start the simulation via API
-      const result = await startSimulationAPI({
-        num_episodes: episodes,
-        attack_types: ['phishing'],
-        quick_test: false,
-      })
+      const result = await startSimulationAPI(cleanConfig)
       
       // Notify parent component if callback provided
-      if (onSimulationStart) {
+      if (onSimulationStart && result && result.id) {
         onSimulationStart(result.id)
       }
       
       // The simulation will run in the background, and we'll poll for updates
       // via the simulationId prop when it's set
     } catch (error) {
-      console.error('Failed to start simulation:', error)
       setIsRunning(false)
-      alert(`Failed to start simulation: ${error.message || 'API server may not be running'}`)
-    } finally {
       setStarting(false)
+      
+      // Safely extract error message without circular references
+      let errorMessage = 'API server may not be running'
+      try {
+        if (typeof error === 'string') {
+          errorMessage = error
+        } else if (error && typeof error === 'object') {
+          if (error.message) {
+            errorMessage = String(error.message)
+          } else if (error.response?.data?.detail) {
+            errorMessage = String(error.response.data.detail)
+          } else if (error.response?.data?.message) {
+            errorMessage = String(error.response.data.message)
+          } else if (error.code) {
+            errorMessage = `Network error: ${error.code}`
+          }
+        }
+      } catch (e) {
+        // If we can't extract the error, use default message
+        console.warn('Could not extract error message:', e)
+      }
+      
+      console.error('Failed to start simulation:', errorMessage)
+      alert(`Failed to start simulation: ${errorMessage}`)
     }
   }
 
@@ -220,7 +270,7 @@ const AgentFlow = ({ simulationId = null, onSimulationStart = null }) => {
                   )}
                 </button>
                 <button
-                  onClick={startSimulation}
+                  onClick={() => startSimulation()}
                   disabled={isRunning || starting}
                   className="btn btn-primary px-6 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >

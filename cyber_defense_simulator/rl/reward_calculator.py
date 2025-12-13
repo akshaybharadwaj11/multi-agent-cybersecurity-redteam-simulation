@@ -81,19 +81,19 @@ class RewardCalculator:
             components['false_positive'] = base_reward
             
         elif outcome.success and outcome.attack_contained:
-            # Successful containment - maximum reward
+            # Successful containment - maximum reward (increased for better learning)
             base_reward = self.reward_success
             components['success'] = base_reward
             
             # Bonus for fast response (encourage quick action)
             if outcome.time_to_remediate < 10.0:
-                speed_bonus = 0.2 * (1.0 - outcome.time_to_remediate / 10.0)
+                speed_bonus = self.reward_success * 0.2 * (1.0 - outcome.time_to_remediate / 10.0)
                 base_reward += speed_bonus
                 components['speed_bonus'] = speed_bonus
             
         elif not outcome.success:
-            # Failed to stop attack - penalty (reduced from -1.0 to -0.8 for better learning)
-            base_reward = self.reward_failure * 0.8  # Less harsh penalty
+            # Failed to stop attack - penalty (reduced for better exploration)
+            base_reward = self.reward_failure
             components['failure'] = base_reward
             
         else:
@@ -106,12 +106,12 @@ class RewardCalculator:
         
         # Collateral damage penalty (reduced)
         if outcome.collateral_damage:
-            damage_penalty = self.reward_collateral_damage * 0.5  # Less harsh
+            damage_penalty = self.reward_collateral_damage
             total_reward += damage_penalty
             components['collateral_damage'] = damage_penalty
         
-        # Time penalty (encourage faster response, but less harsh)
-        time_penalty = -self.time_penalty_factor * outcome.time_to_remediate * 0.5  # Reduced
+        # Time penalty (encourage faster response, but minimal)
+        time_penalty = -self.time_penalty_factor * outcome.time_to_remediate
         total_reward += time_penalty
         components['time_penalty'] = time_penalty
         
@@ -197,7 +197,10 @@ def simulate_outcome(
     """
     Simulate outcome based on action and context
     
-    This is a simplified simulator - in real system would interact with actual environment
+    IMPROVED: More realistic and action-appropriate outcome simulation
+    - Better action-appropriateness matching
+    - Higher success rates for appropriate actions
+    - More deterministic outcomes for better learning
     
     Args:
         action_taken: Remediation action
@@ -209,42 +212,127 @@ def simulate_outcome(
         Simulated outcome
     """
     import random
-    from cyber_defense_simulator.core.data_models import RemediationAction
+    from cyber_defense_simulator.core.data_models import RemediationAction, AttackType
     
-    # Base success probability
-    success_prob = 0.5
+    # Action-appropriateness matrix (higher = better match)
+    action_effectiveness = {
+        # For network-based attacks (PHISHING, DATA_EXFILTRATION)
+        AttackType.PHISHING.value: {
+            RemediationAction.BLOCK_IP.value: 0.85,
+            RemediationAction.ISOLATE_HOST.value: 0.75,
+            RemediationAction.LOCK_ACCOUNT.value: 0.80,
+            RemediationAction.NOTIFY_TEAM.value: 0.60,
+            RemediationAction.SCAN_SYSTEM.value: 0.50,
+            RemediationAction.QUARANTINE_FILE.value: 0.55,
+            RemediationAction.KILL_PROCESS.value: 0.45,
+            RemediationAction.RESET_CREDENTIALS.value: 0.70,
+        },
+        AttackType.DATA_EXFILTRATION.value: {
+            RemediationAction.BLOCK_IP.value: 0.90,
+            RemediationAction.ISOLATE_HOST.value: 0.85,
+            RemediationAction.LOCK_ACCOUNT.value: 0.70,
+            RemediationAction.NOTIFY_TEAM.value: 0.65,
+            RemediationAction.SCAN_SYSTEM.value: 0.55,
+            RemediationAction.QUARANTINE_FILE.value: 0.60,
+            RemediationAction.KILL_PROCESS.value: 0.50,
+            RemediationAction.RESET_CREDENTIALS.value: 0.65,
+        },
+        # For credential-based attacks
+        AttackType.CREDENTIAL_MISUSE.value: {
+            RemediationAction.LOCK_ACCOUNT.value: 0.90,
+            RemediationAction.RESET_CREDENTIALS.value: 0.85,
+            RemediationAction.BLOCK_IP.value: 0.70,
+            RemediationAction.ISOLATE_HOST.value: 0.75,
+            RemediationAction.NOTIFY_TEAM.value: 0.65,
+            RemediationAction.SCAN_SYSTEM.value: 0.50,
+            RemediationAction.QUARANTINE_FILE.value: 0.45,
+            RemediationAction.KILL_PROCESS.value: 0.40,
+        },
+        # For malware/execution attacks
+        AttackType.MALWARE_EXECUTION.value: {
+            RemediationAction.QUARANTINE_FILE.value: 0.90,
+            RemediationAction.KILL_PROCESS.value: 0.85,
+            RemediationAction.ISOLATE_HOST.value: 0.80,
+            RemediationAction.SCAN_SYSTEM.value: 0.75,
+            RemediationAction.BLOCK_IP.value: 0.70,
+            RemediationAction.NOTIFY_TEAM.value: 0.60,
+            RemediationAction.LOCK_ACCOUNT.value: 0.50,
+            RemediationAction.RESET_CREDENTIALS.value: 0.45,
+        },
+        # For lateral movement
+        AttackType.LATERAL_MOVEMENT.value: {
+            RemediationAction.ISOLATE_HOST.value: 0.90,
+            RemediationAction.BLOCK_IP.value: 0.85,
+            RemediationAction.LOCK_ACCOUNT.value: 0.80,
+            RemediationAction.SCAN_SYSTEM.value: 0.70,
+            RemediationAction.NOTIFY_TEAM.value: 0.65,
+            RemediationAction.QUARANTINE_FILE.value: 0.55,
+            RemediationAction.KILL_PROCESS.value: 0.60,
+            RemediationAction.RESET_CREDENTIALS.value: 0.50,
+        },
+        # For privilege escalation
+        AttackType.PRIVILEGE_ESCALATION.value: {
+            RemediationAction.LOCK_ACCOUNT.value: 0.90,
+            RemediationAction.ISOLATE_HOST.value: 0.85,
+            RemediationAction.RESET_CREDENTIALS.value: 0.80,
+            RemediationAction.KILL_PROCESS.value: 0.75,
+            RemediationAction.BLOCK_IP.value: 0.70,
+            RemediationAction.SCAN_SYSTEM.value: 0.65,
+            RemediationAction.NOTIFY_TEAM.value: 0.60,
+            RemediationAction.QUARANTINE_FILE.value: 0.50,
+        },
+    }
     
-    # Adjust based on severity and action appropriateness
-    severity_weights = {"low": 0.9, "medium": 0.7, "high": 0.5, "critical": 0.3}
-    success_prob = severity_weights.get(incident_severity, 0.5)
+    # Get base success probability from action-appropriateness
+    base_success = action_effectiveness.get(
+        attack_type,
+        {action: 0.60 for action in [a.value for a in RemediationAction]}
+    ).get(action_taken, 0.60)
     
-    # Adjust based on action type
+    # Adjust based on severity (higher severity = harder to contain)
+    severity_multiplier = {
+        "low": 1.0,
+        "medium": 0.95,
+        "high": 0.85,
+        "critical": 0.75
+    }
+    success_prob = base_success * severity_multiplier.get(incident_severity, 0.85)
+    
+    # Adjust based on confidence (higher confidence = better outcomes)
+    # Confidence acts as a multiplier (0.5 confidence = 0.5x, 1.0 confidence = 1.0x)
+    confidence_adjusted = 0.5 + (confidence * 0.5)  # Map [0,1] to [0.5, 1.0]
+    success_prob *= confidence_adjusted
+    
+    # Cap success probability between 0.3 and 0.95 (always some uncertainty)
+    success_prob = max(0.30, min(0.95, success_prob))
+    
+    # Determine outcome with some noise
+    noise = random.gauss(0, 0.05)  # Small Gaussian noise
+    success_prob_noisy = max(0.0, min(1.0, success_prob + noise))
+    success = random.random() < success_prob_noisy
+    
+    # False positive: only if low confidence AND not successful
+    false_positive = not success and confidence < 0.5 and random.random() < (0.5 - confidence)
+    
+    # Collateral damage: more likely with aggressive actions, less likely with appropriate ones
     aggressive_actions = [
         RemediationAction.ISOLATE_HOST.value,
         RemediationAction.KILL_PROCESS.value,
         RemediationAction.BLOCK_IP.value
     ]
-    
-    if action_taken in aggressive_actions:
-        success_prob += 0.2
-    
-    # Adjust based on confidence
-    success_prob *= confidence
-    
-    # Determine outcome
-    success = random.random() < success_prob
-    
-    # False positive more likely with low confidence
-    false_positive = not success and (random.random() < (1 - confidence))
-    
-    # Collateral damage more likely with aggressive actions
-    collateral_damage = success and action_taken in aggressive_actions and (random.random() < 0.2)
+    collateral_prob = 0.15 if action_taken in aggressive_actions else 0.05
+    collateral_damage = success and random.random() < collateral_prob
     
     # Attack contained if successful
     attack_contained = success
     
-    # Random response time (5-30 minutes)
-    time_to_remediate = random.uniform(5.0, 30.0)
+    # Response time: faster for appropriate actions, slower for inappropriate ones
+    base_time = 10.0 if action_taken in aggressive_actions else 15.0
+    time_multiplier = 1.0 if base_success > 0.75 else 1.5  # Slower for inappropriate actions
+    time_to_remediate = random.uniform(
+        base_time * time_multiplier * 0.7,
+        base_time * time_multiplier * 1.5
+    )
     
     outcome = Outcome(
         incident_id="simulated",

@@ -11,14 +11,27 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    host: 'localhost',
+    strictPort: true,
     hmr: {
-      port: 3000,
-      host: 'localhost',
+      clientPort: 3000,
+      protocol: 'ws',
+    },
+    watch: {
+      usePolling: false,
     },
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        ws: false, // Disable WebSocket proxying for API
+      },
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
       },
     },
   },

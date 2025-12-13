@@ -37,7 +37,7 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null, fil
       const interval = setInterval(loadLogs, 2000)
       return () => clearInterval(interval)
     }
-  }, [selectedAgent, autoRefresh])
+  }, [selectedAgent, autoRefresh, filterBySimulationId])
 
   useEffect(() => {
     if (filterByLogId) {
@@ -69,7 +69,14 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null, fil
       const agentParam = selectedAgent === 'all' ? null : selectedAgent
       const data = await getAgentLogs(agentParam, 1000)
       const newLogs = data.logs || []
-      console.log(`[AgentLogs] Loaded ${newLogs.length} logs from API (agent: ${agentParam || 'all'})`)
+      console.log(`[AgentLogs] Loaded ${newLogs.length} logs from API (agent: ${agentParam || 'all'}, filterBySimulationId: ${filterBySimulationId || 'none'})`)
+      
+      // Log sample of simulation_ids for debugging
+      if (newLogs.length > 0) {
+        const sampleSimIds = [...new Set(newLogs.map(l => l.simulation_id).filter(Boolean))].slice(0, 3)
+        console.log(`[AgentLogs] Sample simulation_ids in logs:`, sampleSimIds)
+      }
+      
       setLogs(newLogs)
       setLoading(false)
     } catch (error) {
@@ -102,8 +109,56 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null, fil
 
     // Filter by simulation ID (from LogStreams)
     if (selectedSimulationId) {
-      filtered = filtered.filter(log => log.simulation_id === selectedSimulationId)
-      console.log(`[AgentLogs] Filtered to ${filtered.length} logs for simulation_id: ${selectedSimulationId}`)
+      const beforeCount = filtered.length
+      
+      // Normalize the selected simulation ID - remove microseconds if present for matching
+      // Format: sim_20251213_173541_123456 -> sim_20251213_173541
+      const normalizeSimId = (simId) => {
+        if (!simId) return null
+        // Remove microseconds part (last 6 digits after final underscore)
+        return simId.replace(/_\d{6}$/, '')
+      }
+      
+      const normalizedSelectedId = normalizeSimId(selectedSimulationId)
+      
+      filtered = filtered.filter(log => {
+        const logSimId = log.simulation_id
+        if (!logSimId) return false
+        
+        // Try exact match first
+        if (logSimId === selectedSimulationId) {
+          return true
+        }
+        
+        // Try normalized match (without microseconds)
+        const normalizedLogId = normalizeSimId(logSimId)
+        if (normalizedLogId === normalizedSelectedId) {
+          return true
+        }
+        
+        // Try prefix match (in case one is a prefix of the other)
+        if (logSimId.startsWith(selectedSimulationId) || selectedSimulationId.startsWith(logSimId)) {
+          return true
+        }
+        
+        // Try normalized prefix match
+        if (normalizedLogId && normalizedSelectedId) {
+          if (normalizedLogId.startsWith(normalizedSelectedId) || normalizedSelectedId.startsWith(normalizedLogId)) {
+            return true
+          }
+        }
+        
+        return false
+      })
+      
+      console.log(`[AgentLogs] Filtered from ${beforeCount} to ${filtered.length} logs for simulation_id: "${selectedSimulationId}" (normalized: "${normalizedSelectedId}")`)
+      
+      if (filtered.length === 0 && beforeCount > 0) {
+        const availableSimIds = [...new Set(logs.map(l => l.simulation_id).filter(Boolean))]
+        const normalizedAvailable = [...new Set(availableSimIds.map(normalizeSimId).filter(Boolean))]
+        console.warn(`[AgentLogs] No logs matched simulation_id="${selectedSimulationId}". Available simulation_ids:`, availableSimIds.slice(0, 5))
+        console.warn(`[AgentLogs] Normalized available IDs:`, normalizedAvailable.slice(0, 5))
+      }
     }
 
     // Filter by time range
@@ -265,21 +320,38 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null, fil
 
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Log ID Filter Banner */}
-          {selectedLogId && (
+          {/* Filter Banner */}
+          {(selectedLogId || selectedSimulationId) && (
             <div className="md:col-span-4">
               <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm font-medium text-blue-900">Filtered by Log ID:</span>
-                  <code className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-mono">
-                    {selectedLogId.substring(0, 8)}...
-                  </code>
+                  {selectedSimulationId ? (
+                    <>
+                      <span className="text-sm font-medium text-blue-900">Filtered by Simulation:</span>
+                      <code className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-mono">
+                        {selectedSimulationId === 'system' 
+                          ? 'System Logs' 
+                          : selectedSimulationId.replace('sim_', 'Simulation ').replace(/_/g, ' ').replace(/\s+\d{6}$/, '')
+                        }
+                      </code>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm font-medium text-blue-900">Filtered by Log ID:</span>
+                      <code className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-mono">
+                        {selectedLogId.substring(0, 8)}...
+                      </code>
+                    </>
+                  )}
                   <span className="text-xs text-blue-700">
                     ({filteredLogs.length} log{filteredLogs.length !== 1 ? 's' : ''})
                   </span>
                 </div>
                 <button
-                  onClick={() => setSelectedLogId(null)}
+                  onClick={() => {
+                    setSelectedLogId(null)
+                    setSelectedSimulationId(null)
+                  }}
                   className="text-blue-600 hover:text-blue-800 text-sm font-medium px-3 py-1 hover:bg-blue-100 rounded transition-colors"
                 >
                   Clear Filter
@@ -411,9 +483,19 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null, fil
             <p className="text-sm mt-2 text-gray-400">
               {logs.length === 0 
                 ? "Start a simulation to see agent logs"
-                : "Try adjusting your filters"
+                : selectedSimulationId
+                  ? `No logs found for simulation: ${selectedSimulationId}. Total logs available: ${logs.length}`
+                  : "Try adjusting your filters"
               }
             </p>
+            {selectedSimulationId && logs.length > 0 && (
+              <div className="mt-4 text-xs text-gray-500">
+                <p>Available simulation_ids in logs:</p>
+                <code className="block mt-2 p-2 bg-gray-100 rounded text-left max-w-md mx-auto">
+                  {[...new Set(logs.map(l => l.simulation_id).filter(Boolean))].slice(0, 5).join(', ')}
+                </code>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-4 space-y-1">
