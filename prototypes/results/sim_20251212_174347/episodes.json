@@ -1,0 +1,130 @@
+[
+  {
+    "episode_id": "episode_1_751f40b0",
+    "attack_type": "credential_misuse",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_2_8c25b39f",
+    "attack_type": "data_exfiltration",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_3_0f485436",
+    "attack_type": "malware_execution",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_4_a9881156",
+    "attack_type": "credential_misuse",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_5_9ce8dfd3",
+    "attack_type": "credential_misuse",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_6_25ff54e6",
+    "attack_type": "malware_execution",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_7_2d49b9ab",
+    "attack_type": "malware_execution",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_8_c2a50822",
+    "attack_type": "data_exfiltration",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_9_ea87c6da",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_10_190b3ddb",
+    "attack_type": "privilege_escalation",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_11_46dbcb8e",
+    "attack_type": "malware_execution",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_12_e1b77f81",
+    "attack_type": "lateral_movement",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_13_9233ea30",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_14_c84a7166",
+    "attack_type": "credential_misuse",
+    "severity": "critical",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_15_cc7097df",
+    "attack_type": "data_exfiltration",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_16_a2742a05",
+    "attack_type": "privilege_escalation",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  }
+]

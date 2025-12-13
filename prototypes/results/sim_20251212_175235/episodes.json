@@ -1,0 +1,130 @@
+[
+  {
+    "episode_id": "episode_1_d9b8d880",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_2_0c16d256",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_3_d939974b",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_4_c06adbf0",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_5_55043bc1",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_6_1bf67326",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_7_e178f432",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_8_37683123",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_9_89f03b9a",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_10_b3a42dd4",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_11_80702091",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_12_cee0a2a7",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_13_3cd2be46",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_14_3fcb4f93",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "notify_team",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_15_31094959",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  },
+  {
+    "episode_id": "episode_16_1b6b153c",
+    "attack_type": "phishing",
+    "severity": "high",
+    "action_taken": "block_ip",
+    "success": null,
+    "reward": null
+  }
+]

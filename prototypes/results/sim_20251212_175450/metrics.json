@@ -1,0 +1,11 @@
+{
+  "total_episodes": 0,
+  "successful_defenses": 0,
+  "failed_defenses": 0,
+  "false_positives": 0,
+  "average_reward": 0.0,
+  "average_time_to_remediate": 0.0,
+  "detection_rate": 0.0,
+  "action_distribution": {},
+  "reward_history": []
+}
