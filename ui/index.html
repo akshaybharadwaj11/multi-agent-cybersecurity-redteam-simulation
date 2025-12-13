@@ -5,6 +5,24 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cyber Defense Simulator - Dashboard</title>
+    <script>
+      // Aggressively kill service workers BEFORE anything else loads
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister().catch(() => {});
+          }
+        }).catch(() => {});
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({type: 'SKIP_WAITING'});
+        }
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (let name of names) caches.delete(name).catch(() => {});
+        }).catch(() => {});
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Play, Pause, Square, Filter, Search, Eye } from 'lucide-react'
+import { pauseSimulation, resumeSimulation, stopSimulation } from '../services/api'
 import { startSimulation, getSimulationStatus, getSimulationEpisodes, getAllSimulations } from '../services/api'
 import { useNavigate } from 'react-router-dom'
 
@@ -84,6 +85,39 @@ const Simulations = () => {
     }
   }
 
+  const handlePauseSimulation = async (simId) => {
+    try {
+      await pauseSimulation(simId)
+      await loadSimulations() // Refresh to show updated status
+    } catch (error) {
+      console.error('Failed to pause simulation:', error)
+      alert(`Failed to pause simulation: ${error.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleResumeSimulation = async (simId) => {
+    try {
+      await resumeSimulation(simId)
+      await loadSimulations() // Refresh to show updated status
+    } catch (error) {
+      console.error('Failed to resume simulation:', error)
+      alert(`Failed to resume simulation: ${error.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleStopSimulation = async (simId) => {
+    if (!confirm('Are you sure you want to stop this simulation? It cannot be resumed.')) {
+      return
+    }
+    try {
+      await stopSimulation(simId)
+      await loadSimulations() // Refresh to show updated status
+    } catch (error) {
+      console.error('Failed to stop simulation:', error)
+      alert(`Failed to stop simulation: ${error.message || 'Unknown error'}`)
+    }
+  }
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'running':
@@ -92,6 +126,8 @@ const Simulations = () => {
         return 'bg-success-100 text-success-700 border-success-300'
       case 'paused':
         return 'bg-yellow-100 text-yellow-700 border-yellow-300'
+      case 'stopped':
+        return 'bg-gray-100 text-gray-700 border-gray-300'
       default:
         return 'bg-gray-100 text-gray-700 border-gray-300'
     }
@@ -212,18 +248,39 @@ const Simulations = () => {
                 </button>
                 {sim.status === 'running' && (
                   <>
-                    <button className="btn btn-secondary px-3 py-2">
+                    <button 
+                      onClick={() => handlePauseSimulation(sim.id)}
+                      className="btn btn-secondary px-3 py-2"
+                      title="Pause simulation"
+                    >
                       <Pause className="w-4 h-4" />
                     </button>
-                    <button className="btn btn-danger px-3 py-2">
+                    <button 
+                      onClick={() => handleStopSimulation(sim.id)}
+                      className="btn btn-danger px-3 py-2"
+                      title="Stop simulation"
+                    >
                       <Square className="w-4 h-4" />
                     </button>
                   </>
                 )}
                 {sim.status === 'paused' && (
-                  <button className="btn btn-primary px-3 py-2">
-                    <Play className="w-4 h-4" />
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => handleResumeSimulation(sim.id)}
+                      className="btn btn-primary px-3 py-2"
+                      title="Resume simulation"
+                    >
+                      <Play className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleStopSimulation(sim.id)}
+                      className="btn btn-danger px-3 py-2"
+                      title="Stop simulation"
+                    >
+                      <Square className="w-4 h-4" />
+                    </button>
+                  </>
                 )}
               </div>
             </div>

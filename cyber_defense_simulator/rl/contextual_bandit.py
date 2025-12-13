@@ -260,8 +260,13 @@ class ContextualBandit:
                 f"Consider increasing RL_MIN_EPSILON for continued learning."
             )
         
-        if self.episode_count % 10 == 0:
-            logger.info(f"Episode {self.episode_count}: epsilon = {self.epsilon:.4f}")
+        # Log epsilon decay progress every 50 episodes for visibility
+        if self.episode_count % 50 == 0:
+            logger.info(
+                f"Episode {self.episode_count}: epsilon = {self.epsilon:.4f} "
+                f"({self.epsilon*100:.1f}% exploration, "
+                f"decay: {((old_epsilon - self.epsilon) / old_epsilon * 100):.2f}%)"
+            )
     
     def get_best_action(self, state: State) -> Tuple[RemediationAction, float]:
         """

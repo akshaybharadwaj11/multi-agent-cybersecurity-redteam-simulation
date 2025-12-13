@@ -112,8 +112,8 @@ const Dashboard = () => {
       value: stats.activeSimulations,
       icon: Zap,
       color: 'warning',
-      change: '2 running',
-      trend: 'neutral'
+      change: stats.activeSimulations > 0 ? `${stats.activeSimulations} running` : '0 running',
+      trend: stats.activeSimulations > 0 ? 'up' : 'neutral'
     },
     {
       title: 'Total Detections',

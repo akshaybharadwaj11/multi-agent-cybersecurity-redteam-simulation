@@ -9,6 +9,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 import uuid
+import time
 
 from crewai import Crew
 
@@ -150,6 +151,7 @@ class CyberDefenseOrchestrator:
         try:
             # Step 1: Red Team - Generate attack
             logger.info("\n[1/7] Red Team: Generating attack scenario...")
+            time.sleep(0.3)  # Realistic processing delay
             scenario_id = f"scenario_{episode_number}"
             attack_scenario = self.red_team.generate_attack_scenario(
                 scenario_id=scenario_id,
@@ -160,6 +162,7 @@ class CyberDefenseOrchestrator:
             
             # Step 2: Generate telemetry
             logger.info("\n[2/7] Telemetry: Generating synthetic logs...")
+            time.sleep(0.2)  # Realistic processing delay
             telemetry = self.telemetry_generator.generate_telemetry(attack_scenario)
             episode.telemetry = telemetry
             total_logs = (
@@ -170,6 +173,7 @@ class CyberDefenseOrchestrator:
             
             # Step 3: Detection - Analyze telemetry
             logger.info("\n[3/7] Detection: Analyzing telemetry for incidents...")
+            time.sleep(0.4)  # Realistic analysis delay
             incident_id = f"incident_{episode_number}"
             incident_report = self.detection.detect_incident(telemetry, incident_id)
             episode.incident_report = incident_report
@@ -180,6 +184,7 @@ class CyberDefenseOrchestrator:
             
             # Step 4: RAG - Retrieve context
             logger.info("\n[4/7] RAG: Retrieving threat intelligence and runbooks...")
+            time.sleep(0.3)  # Realistic retrieval delay
             rag_context = self.rag.retrieve_context(incident_report)
             episode.rag_context = rag_context
             
@@ -217,6 +222,7 @@ class CyberDefenseOrchestrator:
             
             # Step 5: Remediation - Generate action options
             logger.info("\n[5/7] Remediation: Generating action recommendations...")
+            time.sleep(0.3)  # Realistic processing delay
             remediation_plan = self.remediation.generate_remediation_plan(
                 incident_report,
                 rag_context
@@ -228,6 +234,7 @@ class CyberDefenseOrchestrator:
             
             # Step 6: RL - Select action
             logger.info("\n[6/7] RL Agent: Selecting optimal action...")
+            time.sleep(0.1)  # Realistic decision delay
             state = self._create_state(incident_report, attack_scenario)
             rl_decision = self.rl_agent.select_action(state)
             episode.rl_decision = rl_decision
@@ -238,6 +245,7 @@ class CyberDefenseOrchestrator:
             
             # Step 7: Simulate outcome and calculate reward
             logger.info("\n[7/7] Simulation: Executing action and computing reward...")
+            time.sleep(0.2)  # Realistic execution delay
             outcome = simulate_outcome(
                 action_taken=rl_decision.selected_action.value,
                 incident_severity=incident_report.severity.value,

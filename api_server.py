@@ -52,6 +52,7 @@ app.add_middleware(
 orchestrator: Optional[CyberDefenseOrchestrator] = None
 active_simulations: Dict[str, Dict] = {}
 simulation_results: List[Dict] = []
+simulation_control: Dict[str, Dict] = {}  # Control flags for pause/stop
 
 # Agent logs storage - store last 1000 log entries per agent
 agent_logs: Dict[str, deque] = {
@@ -200,11 +201,30 @@ async def startup_event():
                     logger.info(f"Found trained RL agent: {rl_agent_path}")
                     break
         
-        orchestrator = CyberDefenseOrchestrator(
-            initialize_kb=True,
-            rl_agent_path=rl_agent_path
-        )
-        logger.info("Orchestrator initialized successfully")
+        # Try to initialize orchestrator, with fallback if database has issues
+        try:
+            orchestrator = CyberDefenseOrchestrator(
+                initialize_kb=True,
+                rl_agent_path=rl_agent_path
+            )
+            logger.info("Orchestrator initialized successfully")
+        except Exception as db_error:
+            error_msg = str(db_error)
+            if "no such column" in error_msg.lower() or "collections.topic" in error_msg.lower():
+                logger.warning(f"Database schema issue detected: {error_msg}")
+                logger.info("Attempting to initialize without knowledge base (database will be recreated on next run)...")
+                # Try initializing without KB first, then we can recreate it
+                try:
+                    orchestrator = CyberDefenseOrchestrator(
+                        initialize_kb=False,
+                        rl_agent_path=rl_agent_path
+                    )
+                    logger.info("Orchestrator initialized without knowledge base")
+                except Exception as e2:
+                    logger.error(f"Failed to initialize orchestrator even without KB: {e2}")
+                    raise
+            else:
+                raise
         
         # Log RL agent status
         if rl_agent_path:
@@ -225,14 +245,22 @@ async def startup_event():
             )
             agent_logs["orchestrator"].append(log_entry)
         
-        # Log knowledge base status
-        doc_count = orchestrator.vector_store.get_document_count()
-        log_entry = create_log_entry(
-            agent="orchestrator",
-            level="INFO",
-            message=f"Knowledge base initialized with {doc_count} documents"
-        )
-        agent_logs["orchestrator"].append(log_entry)
+        # Log knowledge base status (if KB was initialized)
+        try:
+            doc_count = orchestrator.vector_store.get_document_count()
+            log_entry = create_log_entry(
+                agent="orchestrator",
+                level="INFO",
+                message=f"Knowledge base initialized with {doc_count} documents"
+            )
+            agent_logs["orchestrator"].append(log_entry)
+        except Exception as kb_error:
+            log_entry = create_log_entry(
+                agent="orchestrator",
+                level="WARNING",
+                message=f"Knowledge base not available: {kb_error}"
+            )
+            agent_logs["orchestrator"].append(log_entry)
         
         # Add orchestrator logs
         log_entry = create_log_entry(
@@ -351,6 +379,8 @@ async def get_all_simulations():
                 "progress": sim_data.get("progress", 0),
                 "currentEpisode": sim_data.get("current_episode", 0),
                 "timestamp": sim_data.get("start_time", datetime.now()),
+                "initial_episode_count": sim_data.get("initial_episode_count"),
+                "final_episode_count": sim_data.get("final_episode_count"),
             })
         
         # Get completed simulations from simulation_results
@@ -368,6 +398,8 @@ async def get_all_simulations():
                     "progress": sim_data.get("progress", 100),
                     "currentEpisode": sim_data.get("current_episode", 0),
                     "timestamp": sim_data.get("start_time", datetime.now()),
+                    "initial_episode_count": sim_data.get("initial_episode_count"),
+                    "final_episode_count": sim_data.get("final_episode_count"),
                 })
         
         # Sort by timestamp (most recent first)
@@ -383,6 +415,82 @@ async def get_recent_simulations(limit: int = 5):
     """Get recent simulations - REAL DATA ONLY"""
     all_sims = await get_all_simulations()
     return all_sims[:limit]
+
+
+@app.post("/api/simulations/{simulation_id}/pause")
+async def pause_simulation(simulation_id: str):
+    """Pause a running simulation"""
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    
+    if simulation_id not in active_simulations:
+        raise HTTPException(status_code=404, detail=f"Simulation {simulation_id} not found")
+    
+    sim_data = active_simulations[simulation_id]
+    if sim_data.get("status") != "running":
+        raise HTTPException(status_code=400, detail=f"Simulation {simulation_id} is not running (status: {sim_data.get('status')})")
+    
+    # Set pause flag
+    if simulation_id not in simulation_control:
+        simulation_control[simulation_id] = {}
+    simulation_control[simulation_id]["paused"] = True
+    
+    # Update status
+    active_simulations[simulation_id]["status"] = "paused"
+    
+    logger.info(f"Simulation {simulation_id} paused")
+    return {"message": f"Simulation {simulation_id} paused", "status": "paused"}
+
+
+@app.post("/api/simulations/{simulation_id}/resume")
+async def resume_simulation(simulation_id: str):
+    """Resume a paused simulation"""
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    
+    if simulation_id not in active_simulations:
+        raise HTTPException(status_code=404, detail=f"Simulation {simulation_id} not found")
+    
+    sim_data = active_simulations[simulation_id]
+    if sim_data.get("status") != "paused":
+        raise HTTPException(status_code=400, detail=f"Simulation {simulation_id} is not paused (status: {sim_data.get('status')})")
+    
+    # Clear pause flag
+    if simulation_id in simulation_control:
+        simulation_control[simulation_id]["paused"] = False
+    
+    # Update status
+    active_simulations[simulation_id]["status"] = "running"
+    
+    logger.info(f"Simulation {simulation_id} resumed")
+    return {"message": f"Simulation {simulation_id} resumed", "status": "running"}
+
+
+@app.post("/api/simulations/{simulation_id}/stop")
+async def stop_simulation(simulation_id: str):
+    """Stop a running or paused simulation"""
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    
+    if simulation_id not in active_simulations:
+        raise HTTPException(status_code=404, detail=f"Simulation {simulation_id} not found")
+    
+    sim_data = active_simulations[simulation_id]
+    status = sim_data.get("status")
+    if status not in ["running", "paused"]:
+        raise HTTPException(status_code=400, detail=f"Simulation {simulation_id} cannot be stopped (status: {status})")
+    
+    # Set stop flag
+    if simulation_id not in simulation_control:
+        simulation_control[simulation_id] = {}
+    simulation_control[simulation_id]["stopped"] = True
+    simulation_control[simulation_id]["paused"] = False  # Clear pause if paused
+    
+    # Update status immediately
+    active_simulations[simulation_id]["status"] = "stopped"
+    
+    logger.info(f"Simulation {simulation_id} stopped by user")
+    return {"message": f"Simulation {simulation_id} stopped", "status": "stopped"}
 
 
 @app.post("/api/simulations/start")
@@ -401,7 +509,8 @@ async def start_simulation(config: SimulationConfig, background_tasks: Backgroun
         if config.attack_types:
             attack_types = [AttackType(at) for at in config.attack_types]
         
-        # Store simulation info
+        # Store simulation info with initial episode count
+        initial_ep_count = len(orchestrator.episodes)
         active_simulations[sim_id] = {
             "id": sim_id,
             "status": "running",
@@ -411,6 +520,8 @@ async def start_simulation(config: SimulationConfig, background_tasks: Backgroun
             "start_time": datetime.now(),
             "attack_type": config.attack_types[0] if config.attack_types else "mixed",
             "success_rate": 0,
+            "initial_episode_count": initial_ep_count,
+            "final_episode_count": initial_ep_count + config.num_episodes,  # Will be updated when complete
         }
         
         # Log simulation start
@@ -465,8 +576,44 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
         # Track initial episode count
         initial_episode_count = len(orchestrator.episodes)
         
+        # Store episode range in simulation data for filtering
+        if sim_id in active_simulations:
+            active_simulations[sim_id]["initial_episode_count"] = initial_episode_count
+            active_simulations[sim_id]["final_episode_count"] = initial_episode_count + num_episodes
+        
+        # Initialize control flags
+        simulation_control[sim_id] = {"paused": False, "stopped": False}
+        
         # Run episodes one by one to track progress
         for episode_num in range(1, num_episodes + 1):
+            # Check if simulation was stopped
+            if sim_id in simulation_control and simulation_control[sim_id].get("stopped", False):
+                logger.info(f"Simulation {sim_id} stopped by user at episode {episode_num}")
+                if sim_id in active_simulations:
+                    active_simulations[sim_id].update({
+                        "status": "stopped",
+                        "progress": int((episode_num - 1) / num_episodes * 100),
+                        "current_episode": episode_num - 1,
+                    })
+                break
+            
+            # Check if simulation is paused - wait until resumed
+            while sim_id in simulation_control and simulation_control[sim_id].get("paused", False):
+                if simulation_control[sim_id].get("stopped", False):
+                    break
+                await asyncio.sleep(0.5)  # Check every 500ms
+            
+            # Check again after pause loop in case it was stopped during pause
+            if sim_id in simulation_control and simulation_control[sim_id].get("stopped", False):
+                logger.info(f"Simulation {sim_id} stopped by user at episode {episode_num}")
+                if sim_id in active_simulations:
+                    active_simulations[sim_id].update({
+                        "status": "stopped",
+                        "progress": int((episode_num - 1) / num_episodes * 100),
+                        "current_episode": episode_num - 1,
+                    })
+                break
+            
             try:
                 # Select attack type for this episode
                 attack_type = None
@@ -629,6 +776,9 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
             if ep.episode_number > initial_episode_count
         ]
         
+        # Update final episode count
+        final_episode_count = len(orchestrator.episodes)
+        
         if final_episodes:
             successful = sum(1 for ep in final_episodes if ep.outcome and ep.outcome.success)
             total_reward = sum(ep.reward.reward for ep in final_episodes if ep.reward)
@@ -641,6 +791,8 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
                     "current_episode": num_episodes,
                     "success_rate": successful / len(final_episodes) if len(final_episodes) > 0 else 0,
                     "end_time": datetime.now(),
+                    "initial_episode_count": initial_episode_count,
+                    "final_episode_count": final_episode_count,
                     "metrics": {
                         "total_episodes": len(final_episodes),
                         "successful_defenses": successful,
@@ -654,6 +806,14 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
                 simulation_results.append(sim_copy)
                 if len(simulation_results) > 100:
                     simulation_results.pop(0)  # Remove oldest
+                
+                # Remove from active_simulations since it's completed
+                # Keep it in active_simulations for a short time for status queries, but mark as completed
+                # The simulation will be available via get_all_simulations() from simulation_results
+                
+                # Clean up control flags
+                if sim_id in simulation_control:
+                    del simulation_control[sim_id]
         
         log_entry = create_log_entry(
             agent="orchestrator",
@@ -913,21 +1073,63 @@ async def get_log_details(log_id: str):
 
 
 @app.get("/api/rl/metrics")
-async def get_rl_metrics():
-    """Get RL agent metrics and statistics"""
+async def get_rl_metrics(simulation_id: Optional[str] = None):
+    """Get RL agent metrics and statistics, optionally filtered by simulation_id"""
     if orchestrator is None:
         raise HTTPException(status_code=503, detail="Orchestrator not initialized")
     
     try:
-        # Get fresh statistics from RL agent
+        # Filter episodes by simulation if simulation_id provided
+        filtered_episodes = orchestrator.episodes
+        if simulation_id:
+            # Find simulation episode range
+            initial_ep = None
+            final_ep = None
+            
+            if simulation_id in active_simulations:
+                sim_data = active_simulations[simulation_id]
+                initial_ep = sim_data.get("initial_episode_count")
+                final_ep = sim_data.get("final_episode_count")
+            else:
+                # Check simulation_results
+                for sim_data in simulation_results:
+                    if sim_data.get("id") == simulation_id:
+                        initial_ep = sim_data.get("initial_episode_count")
+                        final_ep = sim_data.get("final_episode_count")
+                        break
+            
+            if initial_ep is not None:
+                # Filter episodes by episode number range (more reliable than timestamps)
+                if final_ep is not None:
+                    # Use episode number range (episodes are 1-indexed, initial_ep is 0-indexed count)
+                    # So if initial_ep=0, we want episodes 1, 2, 3... up to final_ep
+                    filtered_episodes = [
+                        ep for ep in orchestrator.episodes
+                        if ep.episode_number > initial_ep and ep.episode_number <= final_ep
+                    ]
+                    logger.info(f"Filtering episodes for {simulation_id}: initial_ep={initial_ep}, final_ep={final_ep}, found {len(filtered_episodes)} episodes")
+                else:
+                    # Only initial_ep available, get all episodes after it
+                    filtered_episodes = [
+                        ep for ep in orchestrator.episodes
+                        if ep.episode_number > initial_ep
+                    ]
+                    logger.info(f"Filtering episodes for {simulation_id}: initial_ep={initial_ep}, found {len(filtered_episodes)} episodes (no final_ep)")
+            else:
+                # Simulation not found, return empty data
+                filtered_episodes = []
+                logger.warning(f"Simulation {simulation_id} not found or missing episode range data")
+        
+        # Get fresh statistics from RL agent (global stats)
         rl_stats = orchestrator.rl_agent.get_statistics()
         
-        # Get Q-value trends from recent episodes
+        # Get Q-value trends from filtered episodes
         q_value_history = []
         epsilon_history = []
         
-        if orchestrator.episodes:
-            for episode in orchestrator.episodes[-50:]:  # Last 50 episodes
+        if filtered_episodes:
+            # Use all filtered episodes (not just last 50)
+            for episode in filtered_episodes:
                 if episode.rl_decision:
                     # Get Q-value for selected action
                     q_vals = episode.rl_decision.q_values
@@ -945,16 +1147,79 @@ async def get_rl_metrics():
                             "epsilon": episode.rl_decision.epsilon,
                         })
         
-        # Calculate exploration vs exploitation ratio
-        recent_episodes = [ep for ep in orchestrator.episodes[-20:] if ep.rl_decision]
+        # Calculate exploration vs exploitation ratio from filtered episodes
+        recent_episodes = [ep for ep in filtered_episodes[-20:] if ep.rl_decision]
         exploration_count = sum(1 for ep in recent_episodes if ep.rl_decision.is_exploration)
         exploitation_count = len(recent_episodes) - exploration_count
         
-        # Use episode_count from RL stats (should match number of episodes that completed)
-        # But also ensure it's at least the number of episodes with RL decisions
-        episode_count = max(rl_stats["episode_count"], len([ep for ep in orchestrator.episodes if ep.rl_decision]))
+        # Calculate episode count for filtered episodes
+        filtered_episode_count = len([ep for ep in filtered_episodes if ep.rl_decision])
+        
+        # Calculate action distribution for filtered episodes
+        filtered_action_counts = {}
+        for episode in filtered_episodes:
+            if episode.rl_decision:
+                action = episode.rl_decision.selected_action.value
+                filtered_action_counts[action] = filtered_action_counts.get(action, 0) + 1
+        
+        # Calculate success rate and reward metrics from filtered episodes
+        successful_episodes = sum(1 for ep in filtered_episodes if ep.outcome and ep.outcome.success)
+        total_with_outcome = sum(1 for ep in filtered_episodes if ep.outcome)
+        success_rate = successful_episodes / total_with_outcome if total_with_outcome > 0 else 0.0
+        
+        # Calculate reward statistics
+        rewards = [ep.reward.reward for ep in filtered_episodes if ep.reward]
+        avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
+        max_reward = max(rewards) if rewards else 0.0
+        min_reward = min(rewards) if rewards else 0.0
+        
+        # Calculate reward trend (last 10 vs first 10)
+        if len(rewards) >= 20:
+            recent_rewards = rewards[-10:]
+            early_rewards = rewards[:10]
+            recent_avg = sum(recent_rewards) / len(recent_rewards)
+            early_avg = sum(early_rewards) / len(early_rewards)
+            reward_trend = recent_avg - early_avg
+        else:
+            reward_trend = 0.0
+        
+        # Calculate success rate trend
+        if len(filtered_episodes) >= 20:
+            recent_episodes = filtered_episodes[-10:]
+            early_episodes = filtered_episodes[:10]
+            recent_success = sum(1 for ep in recent_episodes if ep.outcome and ep.outcome.success) / len([ep for ep in recent_episodes if ep.outcome]) if len([ep for ep in recent_episodes if ep.outcome]) > 0 else 0
+            early_success = sum(1 for ep in early_episodes if ep.outcome and ep.outcome.success) / len([ep for ep in early_episodes if ep.outcome]) if len([ep for ep in early_episodes if ep.outcome]) > 0 else 0
+            success_trend = recent_success - early_success
+        else:
+            success_trend = 0.0
+        
+        # Calculate false positive and collateral damage rates
+        false_positives = sum(1 for ep in filtered_episodes if ep.outcome and ep.outcome.false_positive)
+        collateral_damage = sum(1 for ep in filtered_episodes if ep.outcome and ep.outcome.collateral_damage)
+        false_positive_rate = false_positives / total_with_outcome if total_with_outcome > 0 else 0.0
+        collateral_damage_rate = collateral_damage / total_with_outcome if total_with_outcome > 0 else 0.0
+        
+        # Calculate average response time
+        response_times = [ep.outcome.time_to_remediate for ep in filtered_episodes if ep.outcome and ep.outcome.time_to_remediate]
+        avg_response_time = sum(response_times) / len(response_times) if response_times else 0.0
+        
+        # Prepare success rate history
+        success_rate_history = []
+        if filtered_episodes:
+            window_size = max(10, len(filtered_episodes) // 20)  # Adaptive window size
+            for i in range(0, len(filtered_episodes), window_size):
+                window_episodes = filtered_episodes[i:i+window_size]
+                window_successful = sum(1 for ep in window_episodes if ep.outcome and ep.outcome.success)
+                window_total = sum(1 for ep in window_episodes if ep.outcome)
+                if window_total > 0:
+                    success_rate_history.append({
+                        "episode": window_episodes[0].episode_number,
+                        "success_rate": window_successful / window_total,
+                        "window_size": window_total
+                    })
         
         return {
+            "simulation_id": simulation_id,  # Include simulation_id in response
             "parameters": {
                 "learning_rate": orchestrator.rl_agent.learning_rate,
                 "epsilon": orchestrator.rl_agent.epsilon,
@@ -964,14 +1229,18 @@ async def get_rl_metrics():
                 "q_init": orchestrator.rl_agent.q_init,
             },
             "statistics": {
-                "episode_count": episode_count,
-                "update_count": rl_stats["update_count"],
-                "num_states": rl_stats["num_states"],
+                "episode_count": filtered_episode_count,  # Use filtered count
+                "update_count": rl_stats["update_count"],  # Global update count
+                "num_states": rl_stats["num_states"],  # Global state count
                 "avg_q_value": float(rl_stats["avg_q_value"]),
+                "max_q_value": float(rl_stats.get("max_q_value", 0.0)),  # New metric from improved RL core
                 "current_epsilon": float(rl_stats["epsilon"]),
                 "is_learning": bool(rl_stats["update_count"] > 0),  # Explicitly convert to bool
             },
             "action_distribution": {
+                action.replace("_", " ").title(): count
+                for action, count in filtered_action_counts.items()
+            } if filtered_action_counts else {
                 action.replace("_", " ").title(): count
                 for action, count in rl_stats["action_distribution"].items()
             },
@@ -980,8 +1249,20 @@ async def get_rl_metrics():
                 "exploitation": exploitation_count,
                 "ratio": exploration_count / len(recent_episodes) if recent_episodes else 0.0,
             },
-            "q_value_history": q_value_history[-30:],  # Last 30 episodes
-            "epsilon_history": epsilon_history[-30:],  # Last 30 episodes
+            "performance_metrics": {
+                "success_rate": float(success_rate),
+                "success_trend": float(success_trend),
+                "avg_reward": float(avg_reward),
+                "max_reward": float(max_reward),
+                "min_reward": float(min_reward),
+                "reward_trend": float(reward_trend),
+                "false_positive_rate": float(false_positive_rate),
+                "collateral_damage_rate": float(collateral_damage_rate),
+                "avg_response_time": float(avg_response_time),
+            },
+            "q_value_history": q_value_history,  # All filtered episodes
+            "epsilon_history": epsilon_history,  # All filtered episodes
+            "success_rate_history": success_rate_history,  # Success rate over time
         }
     except Exception as e:
         logger.error(f"Error getting RL metrics: {e}")
