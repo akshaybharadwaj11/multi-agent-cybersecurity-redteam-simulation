@@ -9,6 +9,9 @@ from pathlib import Path
 from datetime import datetime
 import sys
 
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,

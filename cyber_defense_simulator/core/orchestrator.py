@@ -25,8 +25,7 @@ from cyber_defense_simulator.agents.rag_agent import RAGAgent
 from cyber_defense_simulator.agents.remediation_agent import RemediationAgent
 
 # Import RL components
-from cyber_defense_simulator.rl.contextual_bandit import ContextualBandit
-from cyber_defense_simulator.rl.reward_calculator import RewardCalculator, simulate_outcome
+from cyber_defense_simulator.rl.rl_core import ContextualBandit, RewardCalculator, simulate_outcome
 
 # Import RAG
 from cyber_defense_simulator.rag.vector_store import VectorStore
