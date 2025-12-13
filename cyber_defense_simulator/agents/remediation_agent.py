@@ -8,10 +8,10 @@ from typing import List
 import json
 import logging
 
-from core.data_models import (
+from cyber_defense_simulator.core.data_models import (
     IncidentReport, RAGContext, RemediationPlan, RemediationOption, RemediationAction
 )
-from core.config import Config
+from cyber_defense_simulator.core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,8 @@ class RemediationAgent:
             Your decisions are grounded in established security runbooks and best practices.""",
             verbose=Config.CREW_VERBOSE,
             allow_delegation=False,
-            llm=Config.get_llm()
+            llm=Config.get_llm(),
+            memory=False  # Disable memory to prevent response caching
         )
         
         logger.info("Initialized Remediation Agent")

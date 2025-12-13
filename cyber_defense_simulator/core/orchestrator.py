@@ -12,28 +12,28 @@ import uuid
 
 from crewai import Crew
 
-from core.data_models import (
+from cyber_defense_simulator.core.data_models import (
     Episode, AttackScenario, AttackType, State, SimulationMetrics,
     RemediationAction, Outcome
 )
-from core.config import Config
+from cyber_defense_simulator.core.config import Config
 
 # Import agents
-from agents.red_team_agent import RedTeamAgent
-from agents.detection_agent import DetectionAgent
-from agents.rag_agent import RAGAgent
-from agents.remediation_agent import RemediationAgent
+from cyber_defense_simulator.agents.red_team_agent import RedTeamAgent
+from cyber_defense_simulator.agents.detection_agent import DetectionAgent
+from cyber_defense_simulator.agents.rag_agent import RAGAgent
+from cyber_defense_simulator.agents.remediation_agent import RemediationAgent
 
 # Import RL components
-from rl.contextual_bandit import ContextualBandit
-from rl.reward_calculator import RewardCalculator, simulate_outcome
+from cyber_defense_simulator.rl.contextual_bandit import ContextualBandit
+from cyber_defense_simulator.rl.reward_calculator import RewardCalculator, simulate_outcome
 
 # Import RAG
-from rag.vector_store import VectorStore
-from rag.knowledge_base import initialize_knowledge_base
+from cyber_defense_simulator.rag.vector_store import VectorStore
+from cyber_defense_simulator.rag.knowledge_base import initialize_knowledge_base
 
 # Import telemetry
-from simulation.telemetry_generator import TelemetryGenerator
+from cyber_defense_simulator.simulation.telemetry_generator import TelemetryGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,8 @@ class CyberDefenseOrchestrator:
     def __init__(
         self,
         vector_store: Optional[VectorStore] = None,
-        initialize_kb: bool = True
+        initialize_kb: bool = True,
+        rl_agent_path: Optional[Path] = None
     ):
         """
         Initialize orchestrator
@@ -64,6 +65,7 @@ class CyberDefenseOrchestrator:
         Args:
             vector_store: Optional vector store (creates new if None)
             initialize_kb: Whether to initialize knowledge base
+            rl_agent_path: Optional path to load a trained RL agent from
         """
         logger.info("Initializing Cyber Defense Orchestrator...")
         
@@ -83,9 +85,21 @@ class CyberDefenseOrchestrator:
         self.rag = RAGAgent(self.vector_store)
         self.remediation = RemediationAgent()
         
-        # Initialize RL agent
+        # Initialize RL agent - load from file if provided, otherwise create new
         all_actions = list(RemediationAction)
-        self.rl_agent = ContextualBandit(actions=all_actions)
+        if rl_agent_path and rl_agent_path.exists():
+            logger.info(f"Loading trained RL agent from {rl_agent_path}")
+            try:
+                self.rl_agent = ContextualBandit.load(rl_agent_path, actions=all_actions)
+                stats = self.rl_agent.get_statistics()
+                logger.info(f"Loaded RL agent: {stats['episode_count']} episodes trained, "
+                          f"{stats['num_states']} states learned, epsilon={stats['epsilon']:.4f}")
+            except Exception as e:
+                logger.warning(f"Failed to load RL agent from {rl_agent_path}: {e}. Creating new agent.")
+                self.rl_agent = ContextualBandit(actions=all_actions)
+        else:
+            logger.info("Creating new RL agent")
+            self.rl_agent = ContextualBandit(actions=all_actions)
         
         # Initialize reward calculator
         self.reward_calculator = RewardCalculator()
@@ -169,10 +183,38 @@ class CyberDefenseOrchestrator:
             logger.info("\n[4/7] RAG: Retrieving threat intelligence and runbooks...")
             rag_context = self.rag.retrieve_context(incident_report)
             episode.rag_context = rag_context
-            logger.info(
-                f"✓ Retrieved {len(rag_context.runbooks)} runbooks, "
-                f"{len(rag_context.threat_intel)} threat intel items"
-            )
+            
+            # Log detailed retrieval information
+            retrieval_details = []
+            retrieval_details.append(f"✓ Retrieved {len(rag_context.runbooks)} runbooks, {len(rag_context.threat_intel)} threat intel items")
+            
+            if rag_context.runbooks:
+                retrieval_details.append("\n📚 RUNBOOKS RETRIEVED:")
+                for idx, runbook in enumerate(rag_context.runbooks, 1):
+                    retrieval_details.append(f"  [{idx}] {runbook.title}")
+                    retrieval_details.append(f"      ID: {runbook.runbook_id}")
+                    retrieval_details.append(f"      Techniques: {', '.join(runbook.applicable_techniques) if runbook.applicable_techniques else 'N/A'}")
+                    retrieval_details.append(f"      Description: {runbook.description[:200]}..." if len(runbook.description) > 200 else f"      Description: {runbook.description}")
+                    if runbook.procedures:
+                        retrieval_details.append(f"      Procedures: {len(runbook.procedures)} steps")
+            
+            if rag_context.threat_intel:
+                retrieval_details.append("\n🎯 THREAT INTELLIGENCE RETRIEVED:")
+                for idx, intel in enumerate(rag_context.threat_intel, 1):
+                    retrieval_details.append(f"  [{idx}] {intel.source}")
+                    retrieval_details.append(f"      Relevance Score: {intel.relevance_score:.4f}")
+                    content_preview = intel.content[:200] + "..." if len(intel.content) > 200 else intel.content
+                    retrieval_details.append(f"      Content: {content_preview}")
+                    if intel.metadata.get('technique_id'):
+                        retrieval_details.append(f"      MITRE Technique: {intel.metadata.get('technique_id')}")
+            
+            if rag_context.similar_incidents:
+                retrieval_details.append(f"\n📋 SIMILAR INCIDENTS: {len(rag_context.similar_incidents)} found")
+                for idx, incident in enumerate(rag_context.similar_incidents[:3], 1):  # Show top 3
+                    retrieval_details.append(f"  [{idx}] Incident ID: {incident.get('incident_id', 'N/A')}")
+                    retrieval_details.append(f"      Similarity: {incident.get('similarity_score', 0):.4f}")
+            
+            logger.info("\n".join(retrieval_details))
             
             # Step 5: Remediation - Generate action options
             logger.info("\n[5/7] Remediation: Generating action recommendations...")

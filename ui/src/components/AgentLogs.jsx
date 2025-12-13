@@ -4,7 +4,7 @@ import { Terminal, Filter, X, Download, RefreshCw, Search, Clock, AlertCircle, I
 import { getAgentLogs, getLogDetails } from '../services/api'
 import { format, parseISO, formatDistanceToNow } from 'date-fns'
 
-const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null }) => {
+const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null, filterBySimulationId = null }) => {
   const [logs, setLogs] = useState([])
   const [filteredLogs, setFilteredLogs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -18,6 +18,7 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null }) =
   const [selectedLog, setSelectedLog] = useState(null)
   const [showLogDetail, setShowLogDetail] = useState(false)
   const [selectedLogId, setSelectedLogId] = useState(filterByLogId)
+  const [selectedSimulationId, setSelectedSimulationId] = useState(filterBySimulationId)
   const [groupByLogId, setGroupByLogId] = useState(false)
 
   const agents = [
@@ -45,8 +46,17 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null }) =
   }, [filterByLogId])
 
   useEffect(() => {
+    if (filterBySimulationId) {
+      setSelectedSimulationId(filterBySimulationId)
+      console.log('[AgentLogs] Filtering by simulation_id:', filterBySimulationId)
+    } else {
+      setSelectedSimulationId(null)
+    }
+  }, [filterBySimulationId])
+
+  useEffect(() => {
     filterLogs()
-  }, [logs, logLevel, searchTerm, timeRange, selectedLogId])
+  }, [logs, logLevel, searchTerm, timeRange, selectedLogId, selectedSimulationId])
 
   useEffect(() => {
     if (autoScroll && logsEndRef.current) {
@@ -59,10 +69,11 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null }) =
       const agentParam = selectedAgent === 'all' ? null : selectedAgent
       const data = await getAgentLogs(agentParam, 1000)
       const newLogs = data.logs || []
+      console.log(`[AgentLogs] Loaded ${newLogs.length} logs from API (agent: ${agentParam || 'all'})`)
       setLogs(newLogs)
       setLoading(false)
     } catch (error) {
-      console.error('Failed to load logs:', error)
+      console.error('[AgentLogs] Failed to load logs:', error)
       setLoading(false)
     }
   }
@@ -87,6 +98,12 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null }) =
     // Filter by selected log ID
     if (selectedLogId) {
       filtered = filtered.filter(log => log.id === selectedLogId)
+    }
+
+    // Filter by simulation ID (from LogStreams)
+    if (selectedSimulationId) {
+      filtered = filtered.filter(log => log.simulation_id === selectedSimulationId)
+      console.log(`[AgentLogs] Filtered to ${filtered.length} logs for simulation_id: ${selectedSimulationId}`)
     }
 
     // Filter by time range

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   LineChart,
   Line,
@@ -11,18 +11,52 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
+import { getAnalytics } from '../services/api'
 
 const MetricsChart = () => {
-  // Sample data - in real app, this would come from API
-  const data = [
-    { time: '00:00', reward: 0.45, success: 0.65, detection: 0.72 },
-    { time: '01:00', reward: 0.52, success: 0.68, detection: 0.75 },
-    { time: '02:00', reward: 0.48, success: 0.70, detection: 0.78 },
-    { time: '03:00', reward: 0.55, success: 0.72, detection: 0.80 },
-    { time: '04:00', reward: 0.58, success: 0.75, detection: 0.82 },
-    { time: '05:00', reward: 0.62, success: 0.78, detection: 0.85 },
-    { time: '06:00', reward: 0.65, success: 0.80, detection: 0.88 },
-  ]
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadMetrics()
+    const interval = setInterval(loadMetrics, 5000) // Refresh every 5 seconds
+    return () => clearInterval(interval)
+  }, [])
+
+  const loadMetrics = async () => {
+    try {
+      const analytics = await getAnalytics('24h')
+      
+      if (analytics.performance_metrics && analytics.performance_metrics.length > 0) {
+        setData(analytics.performance_metrics)
+      } else {
+        // If no data, show empty state
+        setData([])
+      }
+    } catch (error) {
+      console.error('Error loading metrics:', error)
+      setData([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Show loading or empty state
+  if (loading && data.length === 0) {
+    return (
+      <div className="h-80 flex items-center justify-center">
+        <div className="text-gray-500">Loading metrics...</div>
+      </div>
+    )
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="h-80 flex items-center justify-center">
+        <div className="text-gray-500">No metrics data available. Run some simulations to see performance metrics.</div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-80">

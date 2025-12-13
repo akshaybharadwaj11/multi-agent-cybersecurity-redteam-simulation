@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Brain, TrendingUp, TrendingDown, Activity, Target, Zap, BarChart3 } from 'lucide-react'
 import { getRLMetrics } from '../services/api'
@@ -8,6 +8,7 @@ const RLMetrics = () => {
   const [metrics, setMetrics] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const hasShownErrorRef = useRef(false)
 
   useEffect(() => {
     loadMetrics()
@@ -21,9 +22,17 @@ const RLMetrics = () => {
       setMetrics(data)
       setLoading(false)
       setError(null)
+      hasShownErrorRef.current = false
     } catch (err) {
-      console.error('Failed to load RL metrics:', err)
-      setError(err.message)
+      // Only log error if it's not a network error (API might not be running)
+      if (err.code !== 'ERR_NETWORK' && err.code !== 'ECONNREFUSED') {
+        console.error('Failed to load RL metrics:', err)
+      }
+      // Don't set error message repeatedly - API might just not be available
+      if (!hasShownErrorRef.current) {
+        setError('RL metrics API is not available. Make sure the API server is running on port 8000.')
+        hasShownErrorRef.current = true
+      }
       setLoading(false)
     }
   }
@@ -78,6 +87,41 @@ const RLMetrics = () => {
 
       {/* Key Parameters */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Learning Status Card */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.1 }}
+          whileHover={{ scale: 1.02, y: -4 }}
+          className="card group cursor-pointer"
+        >
+          <div className="flex items-center space-x-4 mb-4">
+            <div className={`bg-gradient-to-br p-4 rounded-xl shadow-sm group-hover:shadow-md transition-shadow ${
+              metrics.statistics.is_learning 
+                ? 'from-green-100 to-green-200' 
+                : 'from-gray-100 to-gray-200'
+            }`}>
+              <Activity className={`w-7 h-7 ${
+                metrics.statistics.is_learning ? 'text-green-600' : 'text-gray-600'
+              }`} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-1">Learning Status</p>
+              <p className={`text-2xl font-bold ${
+                metrics.statistics.is_learning ? 'text-green-600' : 'text-gray-600'
+              }`}>
+                {metrics.statistics.is_learning ? '✓ Learning' : '○ Not Learning'}
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 leading-relaxed">
+            {metrics.statistics.is_learning 
+              ? `Active learning with ${metrics.statistics.update_count} Q-value updates`
+              : 'No learning updates yet - start simulations to begin learning'
+            }
+          </p>
+        </motion.div>
+
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}

@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.orchestrator import CyberDefenseOrchestrator
 from core.data_models import AttackType, RemediationAction
-from rag.vector_store import VectorStore
+from cyber_defense_simulator.rag.vector_store import VectorStore
 import logging
 
 # Setup logging

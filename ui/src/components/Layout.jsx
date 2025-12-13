@@ -8,9 +8,9 @@ import {
   Menu,
   X,
   Shield,
-  Zap,
   Terminal,
-  Brain
+  Brain,
+  Activity
 } from 'lucide-react'
 
 const Layout = ({ children }) => {
@@ -19,6 +19,7 @@ const Layout = ({ children }) => {
 
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/orchestration', icon: Activity, label: 'Orchestration' },
     { path: '/simulations', icon: PlayCircle, label: 'Simulations' },
     { path: '/agents', icon: Users, label: 'Agents' },
     { path: '/analytics', icon: BarChart3, label: 'Analytics' },

@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+// Use relative URL to go through Vite proxy, or absolute if VITE_API_URL is set
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -8,7 +9,38 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: false, // Don't send credentials for CORS
 })
+
+// Add request interceptor for debugging
+api.interceptors.request.use(
+  (config) => {
+    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`)
+    return config
+  },
+  (error) => {
+    console.error('[API] Request error:', error)
+    return Promise.reject(error)
+  }
+)
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  (response) => {
+    return response
+  },
+  (error) => {
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      console.error('[API] Network error - API server may be down or unreachable')
+      console.error('[API] Check if API server is running on http://localhost:8000')
+    } else if (error.response) {
+      console.error(`[API] ${error.response.status} ${error.response.statusText}:`, error.response.data)
+    } else {
+      console.error('[API] Error:', error.message)
+    }
+    return Promise.reject(error)
+  }
+)
 
 // Dashboard endpoints
 export const getDashboardStats = async () => {

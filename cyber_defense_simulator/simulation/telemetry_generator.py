@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import List
 import logging
 
-from core.data_models import AttackScenario, TelemetryData, LogEntry
+from cyber_defense_simulator.core.data_models import AttackScenario, TelemetryData, LogEntry
 
 logger = logging.getLogger(__name__)
 

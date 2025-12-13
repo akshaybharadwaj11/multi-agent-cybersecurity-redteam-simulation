@@ -7,9 +7,9 @@ from crewai import Agent, Task
 from typing import List
 import logging
 
-from core.data_models import IncidentReport, RAGContext, ThreatIntelligence, Runbook
-from rag.vector_store import VectorStore
-from core.config import Config
+from cyber_defense_simulator.core.data_models import IncidentReport, RAGContext, ThreatIntelligence, Runbook
+from cyber_defense_simulator.rag.vector_store import VectorStore
+from cyber_defense_simulator.core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,8 @@ class RAGAgent:
             that helps responders make informed decisions.""",
             verbose=Config.CREW_VERBOSE,
             allow_delegation=False,
-            llm=Config.get_llm()
+            llm=Config.get_llm(),
+            memory=False  # Disable memory to prevent response caching
         )
         
         logger.info("Initialized RAG Agent")
@@ -124,19 +125,37 @@ class RAGAgent:
         Returns:
             List of relevant runbooks
         """
+        logger.info(f"🔍 Searching ChromaDB for runbooks matching MITRE technique: {technique_id}")
+        
         # Search vector store
         results = self.vector_store.search_by_mitre_technique(
             technique_id=technique_id,
             top_k=2
         )
         
+        logger.info(f"📚 ChromaDB returned {len(results)} results for technique {technique_id}")
+        
         runbooks = []
-        for doc, metadata, score in results:
+        for idx, (doc, metadata, score) in enumerate(results, 1):
             if metadata.get('type') == 'runbook':
+                runbook_id = metadata.get('id', 'unknown')
+                title = metadata.get('title', 'Security Runbook')
+                techniques = metadata.get('techniques', 'N/A')
+                
+                # Log detailed retrieval information
+                logger.info(
+                    f"📖 Retrieved Runbook #{idx}:\n"
+                    f"   ID: {runbook_id}\n"
+                    f"   Title: {title}\n"
+                    f"   Techniques: {techniques}\n"
+                    f"   Similarity Score: {score:.4f}\n"
+                    f"   Content Preview: {doc[:150]}..."
+                )
+                
                 # Parse runbook from document
                 runbook = Runbook(
-                    runbook_id=metadata.get('id', 'unknown'),
-                    title=metadata.get('title', 'Security Runbook'),
+                    runbook_id=runbook_id,
+                    title=title,
                     description=doc[:200] + "..." if len(doc) > 200 else doc,
                     applicable_techniques=[technique_id],
                     procedures=self._extract_procedures(doc),
@@ -144,6 +163,9 @@ class RAGAgent:
                     expected_outcomes=[]
                 )
                 runbooks.append(runbook)
+        
+        if not runbooks:
+            logger.warning(f"⚠️  No runbooks found for technique {technique_id}")
         
         return runbooks
     
@@ -163,21 +185,40 @@ class RAGAgent:
         # Build search query from incident
         query = f"{incident_report.summary} {' '.join(incident_report.mitre_techniques)}"
         
+        logger.info(f"🔍 Searching ChromaDB for threat intelligence with query: {query[:100]}...")
+        
         results = self.vector_store.search(
             query=query,
             top_k=3,
             filters={"type": "mitre_technique"}
         )
         
+        logger.info(f"📊 ChromaDB returned {len(results)} threat intelligence results")
+        
         threat_intel = []
-        for doc, metadata, score in results:
+        for idx, (doc, metadata, score) in enumerate(results, 1):
+            technique_id = metadata.get('technique_id', 'unknown')
+            source = f"MITRE {technique_id}"
+            
+            # Log detailed retrieval information
+            logger.info(
+                f"🎯 Retrieved Threat Intelligence #{idx}:\n"
+                f"   Source: {source}\n"
+                f"   Technique ID: {technique_id}\n"
+                f"   Similarity Score: {score:.4f}\n"
+                f"   Content Preview: {doc[:150]}..."
+            )
+            
             intel = ThreatIntelligence(
-                source=f"MITRE {metadata.get('technique_id', 'unknown')}",
+                source=source,
                 content=doc,
                 relevance_score=score,
                 metadata=metadata
             )
             threat_intel.append(intel)
+        
+        if not threat_intel:
+            logger.warning(f"⚠️  No threat intelligence found for query")
         
         return threat_intel
     
@@ -194,19 +235,36 @@ class RAGAgent:
         Returns:
             List of similar incidents
         """
+        logger.info(f"🔍 Searching ChromaDB for similar incidents: {incident_report.summary[:100]}...")
+        
         results = self.vector_store.search_similar_incidents(
             incident_description=incident_report.summary,
             top_k=2
         )
         
+        logger.info(f"📋 ChromaDB returned {len(results)} similar incident results")
+        
         incidents = []
-        for doc, metadata, score in results:
+        for idx, (doc, metadata, score) in enumerate(results, 1):
             if metadata.get('type') == 'incident':
+                incident_id = metadata.get('incident_id', 'unknown')
+                
+                # Log detailed retrieval information
+                logger.info(
+                    f"📝 Retrieved Similar Incident #{idx}:\n"
+                    f"   Incident ID: {incident_id}\n"
+                    f"   Similarity Score: {score:.4f}\n"
+                    f"   Description Preview: {doc[:150]}..."
+                )
+                
                 incidents.append({
-                    "incident_id": metadata.get('incident_id', 'unknown'),
+                    "incident_id": incident_id,
                     "description": doc[:300] + "..." if len(doc) > 300 else doc,
                     "similarity_score": score
                 })
+        
+        if not incidents:
+            logger.warning(f"⚠️  No similar incidents found")
         
         return incidents
     

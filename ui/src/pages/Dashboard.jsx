@@ -15,6 +15,7 @@ import StatCard from '../components/StatCard'
 import AgentFlow from '../components/AgentFlow'
 import RecentSimulations from '../components/RecentSimulations'
 import MetricsChart from '../components/MetricsChart'
+import AgentOrchestrationGraph from '../components/AgentOrchestrationGraph'
 import { getDashboardStats, getRecentSimulations } from '../services/api'
 
 const Dashboard = () => {
@@ -185,6 +186,13 @@ const Dashboard = () => {
         <div className="lg:col-span-1">
           <RecentSimulations simulations={recentSims} loading={loading} />
         </div>
+      </div>
+
+      {/* Agent Orchestration Graph */}
+      <div className="card p-0 overflow-hidden">
+        <AgentOrchestrationGraph 
+          simulationId={activeSimulationId}
+        />
       </div>
 
       {/* Metrics Chart */}

@@ -10,8 +10,8 @@ import numpy as np
 from pathlib import Path
 import logging
 
-from core.config import Config
-from rag.embeddings import EmbeddingGenerator
+from cyber_defense_simulator.core.config import Config
+from cyber_defense_simulator.rag.embeddings import EmbeddingGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -124,20 +124,43 @@ class VectorStore:
         
         results = self.collection.query(**query_kwargs)
         
+        logger.info(f"🔎 ChromaDB search executed: query='{query[:80]}...', top_k={top_k}, filters={filters}")
+        
         # Format results
         formatted_results = []
         if results['documents'] and len(results['documents']) > 0 and results['documents'][0]:
-            for doc, metadata, distance in zip(
+            logger.info(f"📦 ChromaDB returned {len(results['documents'][0])} raw results")
+            
+            for idx, (doc, metadata, distance) in enumerate(zip(
                 results['documents'][0],
                 results['metadatas'][0],
                 results['distances'][0]
-            ):
+            ), 1):
                 # Convert distance to similarity score (0-1)
                 similarity = 1 / (1 + distance)
+                
+                # Log each retrieved document
+                doc_type = metadata.get('type', 'unknown')
+                doc_id = metadata.get('id', f'result_{idx}')
+                doc_title = metadata.get('title', 'No title')
+                
+                logger.info(
+                    f"   Result #{idx}:\n"
+                    f"      ID: {doc_id}\n"
+                    f"      Type: {doc_type}\n"
+                    f"      Title: {doc_title}\n"
+                    f"      Distance: {distance:.4f} → Similarity: {similarity:.4f}\n"
+                    f"      Content: {doc[:100]}..."
+                )
+                
                 formatted_results.append((doc, metadata, similarity))
+        else:
+            logger.warning(f"⚠️  ChromaDB returned no results for query: {query[:80]}...")
         
         # Limit to top_k
-        return formatted_results[:top_k]
+        final_results = formatted_results[:top_k]
+        logger.info(f"✅ Returning {len(final_results)} formatted results (top {top_k})")
+        return final_results
     
     def search_by_mitre_technique(
         self,
@@ -182,13 +205,26 @@ class VectorStore:
         
         # If no exact matches, return top runbooks by relevance
         if not runbook_results:
+            logger.info(f"⚠️  No exact technique matches for {technique_id}, using top relevant runbooks")
             for doc, metadata, score in all_results:
                 if metadata.get('type') == 'runbook':
+                    runbook_id = metadata.get('id', 'unknown')
+                    title = metadata.get('title', 'No title')
+                    techniques = metadata.get('techniques', 'N/A')
+                    
+                    logger.info(
+                        f"   Fallback Runbook:\n"
+                        f"      ID: {runbook_id}\n"
+                        f"      Title: {title}\n"
+                        f"      Techniques: {techniques}\n"
+                        f"      Score: {score:.4f}"
+                    )
+                    
                     runbook_results.append((doc, metadata, score))
                     if len(runbook_results) >= top_k:
                         break
         
-        logger.info(f"Found {len(runbook_results)} runbooks for technique {technique_id}")
+        logger.info(f"✅ Found {len(runbook_results)} runbooks for technique {technique_id}")
         return runbook_results
     
     def search_similar_incidents(

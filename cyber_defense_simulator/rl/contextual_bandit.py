@@ -9,8 +9,8 @@ import pickle
 from pathlib import Path
 import logging
 
-from core.data_models import State, RemediationAction, RLDecision
-from core.config import Config
+from cyber_defense_simulator.core.data_models import State, RemediationAction, RLDecision
+from cyber_defense_simulator.core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -70,17 +70,38 @@ class ContextualBandit:
         """
         Convert state to hashable key for Q-table
         
+        Improved state representation with finer granularity:
+        - Severity: 4 levels (low, medium, high, critical)
+        - Attack type: 6 types
+        - Confidence: 10 bins (0-9)
+        - Affected assets: 5 bins (0-2, 3-5, 6-10, 11-20, 21+)
+        
         Args:
             state: Current state
             
         Returns:
             String key representation
         """
+        # Finer granularity for confidence (20 bins instead of 10)
+        confidence_bin = int(state.confidence_level * 20)
+        
+        # Better discretization for affected assets
+        if state.num_affected_assets <= 2:
+            assets_bin = "0-2"
+        elif state.num_affected_assets <= 5:
+            assets_bin = "3-5"
+        elif state.num_affected_assets <= 10:
+            assets_bin = "6-10"
+        elif state.num_affected_assets <= 20:
+            assets_bin = "11-20"
+        else:
+            assets_bin = "21+"
+        
         return (
             f"{state.incident_severity.value}_"
             f"{state.attack_type.value}_"
-            f"{int(state.confidence_level * 10)}_"
-            f"{min(state.num_affected_assets, 10)}"
+            f"c{confidence_bin}_"
+            f"a{assets_bin}"
         )
     
     def _get_q_values(self, state: State) -> Dict[str, float]:
@@ -105,7 +126,11 @@ class ContextualBandit:
     
     def select_action(self, state: State) -> RLDecision:
         """
-        Select action using epsilon-greedy policy
+        Select action using epsilon-greedy policy with softmax fallback
+        
+        Improved action selection:
+        - Epsilon-greedy for exploration/exploitation balance
+        - Softmax for tie-breaking when Q-values are close
         
         Args:
             state: Current state
@@ -122,20 +147,45 @@ class ContextualBandit:
             # Explore: random action
             selected_action = np.random.choice(self.actions)
         else:
-            # Exploit: best action
-            selected_action = max(q_values.items(), key=lambda x: x[1])[0]
+            # Exploit: best action, with softmax tie-breaking for close Q-values
+            max_q = max(q_values.values())
+            close_actions = [a for a, q in q_values.items() if q >= max_q - 0.1]
+            
+            if len(close_actions) > 1:
+                # Multiple actions with similar Q-values - use softmax
+                q_array = np.array([q_values[a] for a in close_actions])
+                exp_q = np.exp(q_array - np.max(q_array))  # Numerical stability
+                probs = exp_q / exp_q.sum()
+                selected_action = np.random.choice(close_actions, p=probs)
+            else:
+                # Clear best action
+                selected_action = max(q_values.items(), key=lambda x: x[1])[0]
         
         # Update statistics
         self.action_counts[selected_action] += 1
         
         # Create decision object
-        decision = RLDecision(
-            state=state,
-            selected_action=RemediationAction(selected_action),
-            q_values=q_values.copy(),
-            epsilon=self.epsilon,
-            is_exploration=is_exploration
-        )
+        # Use model_validate with proper state serialization for Pydantic v2
+        try:
+            decision = RLDecision(
+                state=state,
+                selected_action=RemediationAction(selected_action),
+                q_values=q_values.copy(),
+                epsilon=self.epsilon,
+                is_exploration=is_exploration
+            )
+        except Exception as e:
+            # Fallback for Pydantic v2: validate from dict
+            logger.warning(f"RLDecision validation error, using fallback: {e}")
+            state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.dict()
+            decision_data = {
+                "state": State.model_validate(state_dict),
+                "selected_action": selected_action,
+                "q_values": q_values.copy(),
+                "epsilon": self.epsilon,
+                "is_exploration": is_exploration
+            }
+            decision = RLDecision(**decision_data)
         
         logger.debug(
             f"Selected action: {selected_action} "
@@ -198,8 +248,17 @@ class ContextualBandit:
     
     def decay_epsilon(self) -> None:
         """Decay exploration rate"""
+        old_epsilon = self.epsilon
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
         self.episode_count += 1
+        
+        # If epsilon hit minimum, log a warning
+        if self.epsilon == self.min_epsilon and old_epsilon > self.min_epsilon:
+            logger.warning(
+                f"Epsilon reached minimum ({self.min_epsilon:.4f}). "
+                f"Exploration rate is now {self.min_epsilon*100:.1f}%. "
+                f"Consider increasing RL_MIN_EPSILON for continued learning."
+            )
         
         if self.episode_count % 10 == 0:
             logger.info(f"Episode {self.episode_count}: epsilon = {self.epsilon:.4f}")
@@ -277,12 +336,29 @@ class ContextualBandit:
             state = pickle.load(f)
         
         config = state['config']
+        
+        # Get current config's min_epsilon (may be updated)
+        current_config = Config.get_rl_config()
+        current_min_epsilon = current_config['min_epsilon']
+        
+        # Use current min_epsilon if it's higher (allows updating min_epsilon)
+        min_epsilon = max(config['min_epsilon'], current_min_epsilon)
+        
+        # Ensure epsilon is at least min_epsilon
+        loaded_epsilon = state['epsilon']
+        if loaded_epsilon < min_epsilon:
+            logger.info(
+                f"Loaded epsilon ({loaded_epsilon:.4f}) is below current min_epsilon ({min_epsilon:.4f}). "
+                f"Resetting epsilon to {min_epsilon:.4f} for continued exploration."
+            )
+            loaded_epsilon = min_epsilon
+        
         agent = cls(
             actions=actions,
             learning_rate=config['learning_rate'],
-            epsilon=state['epsilon'],
+            epsilon=loaded_epsilon,
             epsilon_decay=config['epsilon_decay'],
-            min_epsilon=config['min_epsilon'],
+            min_epsilon=min_epsilon,
             discount_factor=config['discount_factor'],
             q_init=config['q_init']
         )
@@ -293,7 +369,7 @@ class ContextualBandit:
         agent.action_counts = state['action_counts']
         
         logger.info(f"Loaded agent from {filepath}")
-        logger.info(f"States: {len(agent.q_table)}, Episodes: {agent.episode_count}")
+        logger.info(f"States: {len(agent.q_table)}, Episodes: {agent.episode_count}, Epsilon: {agent.epsilon:.4f}")
         
         return agent
     

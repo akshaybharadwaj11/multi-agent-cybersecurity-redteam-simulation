@@ -10,8 +10,8 @@ import logging
 from datetime import datetime, timedelta
 import random
 
-from core.data_models import AttackScenario, AttackStep, AttackType, TelemetryData, LogEntry
-from core.config import Config
+from cyber_defense_simulator.core.data_models import AttackScenario, AttackStep, AttackType, TelemetryData, LogEntry
+from cyber_defense_simulator.core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,8 @@ class RedTeamAgent:
             detection and response capabilities.""",
             verbose=Config.CREW_VERBOSE,
             allow_delegation=False,
-            llm=Config.get_llm()
+            llm=Config.get_llm(),
+            memory=False  # Disable memory to prevent response caching
         )
         
         logger.info("Initialized Red Team Agent")

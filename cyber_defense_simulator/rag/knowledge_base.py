@@ -8,8 +8,8 @@ from typing import List, Dict
 from pathlib import Path
 import logging
 
-from rag.vector_store import VectorStore
-from core.config import Config
+from cyber_defense_simulator.rag.vector_store import VectorStore
+from cyber_defense_simulator.core.config import Config
 
 logger = logging.getLogger(__name__)
 

@@ -25,20 +25,25 @@ const LogStreams = ({ onStreamSelect = null }) => {
   const loadLogs = async () => {
     try {
       const data = await getAgentLogs(null, 1000) // Get all logs
-      setLogs(data.logs || [])
+      const newLogs = data.logs || []
+      console.log(`[LogStreams] Loaded ${newLogs.length} logs from API`)
+      setLogs(newLogs)
       setLoading(false)
     } catch (error) {
-      console.error('Failed to load logs:', error)
+      console.error('[LogStreams] Failed to load logs:', error)
       setLoading(false)
     }
   }
 
   const processStreams = () => {
-    // Group logs by their unique ID (log stream)
+    // Group logs by simulation_id (one stream per simulation)
     const streamMap = new Map()
     
+    console.log(`[LogStreams] Processing ${logs.length} logs into streams`)
+    
     logs.forEach(log => {
-      const streamId = log.id || 'unknown'
+      // Use simulation_id if available, otherwise use 'system' for non-simulation logs
+      const streamId = log.simulation_id || 'system'
       
       if (!streamMap.has(streamId)) {
         streamMap.set(streamId, {
@@ -82,6 +87,7 @@ const LogStreams = ({ onStreamSelect = null }) => {
       logs: stream.logs,
     }))
     
+    console.log(`[LogStreams] Created ${streamArray.length} streams from ${logs.length} logs`)
     setStreams(streamArray)
   }
 
@@ -162,6 +168,7 @@ const LogStreams = ({ onStreamSelect = null }) => {
             <p className="text-sm text-gray-600 mt-1">
               {streams.length} log stream{streams.length !== 1 ? 's' : ''} 
               {filteredStreams.length !== streams.length && ` (${filteredStreams.length} filtered)`}
+              <span className="ml-2 text-xs text-gray-500">(Each simulation grouped into one stream)</span>
             </p>
           </div>
           <div className="flex items-center space-x-3">
@@ -266,7 +273,10 @@ const LogStreams = ({ onStreamSelect = null }) => {
                   </td>
                   <td className="px-4 py-3">
                     <code className="text-sm font-mono text-blue-600 hover:text-blue-800 hover:underline">
-                      {stream.id.substring(0, 32)}...
+                      {stream.id === 'system' 
+                        ? 'System Logs' 
+                        : stream.id.replace('sim_', 'Simulation ').replace(/_/g, ' ').replace(/\s+\d{6}$/, '') // Remove microseconds for readability
+                      }
                     </code>
                   </td>
                   <td className="px-4 py-3">

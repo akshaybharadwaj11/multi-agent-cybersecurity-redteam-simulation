@@ -21,6 +21,8 @@ const AgentFlow = ({ simulationId = null, onSimulationStart = null }) => {
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [fullEpisodeData, setFullEpisodeData] = useState(null)
   const [starting, setStarting] = useState(false)
+  const [numEpisodes, setNumEpisodes] = useState(10)
+  const [showEpisodeInput, setShowEpisodeInput] = useState(false)
 
   const agents = [
     {
@@ -149,7 +151,7 @@ const AgentFlow = ({ simulationId = null, onSimulationStart = null }) => {
     }
   }, [simulationId])
 
-  const startSimulation = async () => {
+  const startSimulation = async (episodes = numEpisodes) => {
     setStarting(true)
     setCurrentStep(0)
     setIsRunning(true)
@@ -158,12 +160,10 @@ const AgentFlow = ({ simulationId = null, onSimulationStart = null }) => {
     try {
       // Actually start the simulation via API
       const result = await startSimulationAPI({
-        num_episodes: 10,
+        num_episodes: episodes,
         attack_types: ['phishing'],
         quick_test: false,
       })
-      
-      console.log('Simulation started:', result)
       
       // Notify parent component if callback provided
       if (onSimulationStart) {
@@ -184,29 +184,69 @@ const AgentFlow = ({ simulationId = null, onSimulationStart = null }) => {
   return (
     <div className="card glow">
       <div className="card-header">
-        <div>
-          <h2 className="card-title">Agent Flow Visualization</h2>
-          <p className="text-sm text-gray-500 mt-1">Interactive multi-agent simulation pipeline</p>
-        </div>
-        <button
-          onClick={startSimulation}
-          disabled={isRunning || starting}
-          className="btn btn-primary px-6 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {starting ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Starting...
-            </>
-          ) : isRunning ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Running...
-            </>
-          ) : (
-            'Start Simulation'
-          )}
-        </button>
+            <div>
+              <h2 className="card-title">Agent Flow Visualization</h2>
+              <p className="text-sm text-gray-500 mt-1">Interactive multi-agent simulation pipeline</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              {showEpisodeInput && (
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-600">Episodes:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10000"
+                    value={numEpisodes}
+                    onChange={(e) => setNumEpisodes(Math.max(1, parseInt(e.target.value) || 10))}
+                    className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    disabled={isRunning || starting}
+                  />
+                </div>
+              )}
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => startSimulation(1000)}
+                  disabled={isRunning || starting}
+                  className="btn bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-5 py-2.5 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/30"
+                  title="Train RL agent for 1000 episodes"
+                >
+                  {starting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                      Starting...
+                    </>
+                  ) : (
+                    '🚀 Train 1000 Episodes'
+                  )}
+                </button>
+                <button
+                  onClick={startSimulation}
+                  disabled={isRunning || starting}
+                  className="btn btn-primary px-6 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {starting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Starting...
+                    </>
+                  ) : isRunning ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Running...
+                    </>
+                  ) : (
+                    `Start (${numEpisodes} episodes)`
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowEpisodeInput(!showEpisodeInput)}
+                  className="text-gray-500 hover:text-gray-700 p-2"
+                  title="Customize episode count"
+                >
+                  ⚙️
+                </button>
+              </div>
+            </div>
       </div>
 
       <div className="space-y-4">

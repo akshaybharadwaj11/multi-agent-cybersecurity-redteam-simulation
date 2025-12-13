@@ -15,13 +15,15 @@ from pathlib import Path
 import sys
 import logging
 from collections import deque
+import contextvars
+import threading
 
 # Add cyber_defense_simulator to path
 sys.path.insert(0, str(Path(__file__).parent / "cyber_defense_simulator"))
 
-from core.orchestrator import CyberDefenseOrchestrator
-from core.data_models import AttackType, SimulationMetrics
-from core.config import Config
+from cyber_defense_simulator.core.orchestrator import CyberDefenseOrchestrator
+from cyber_defense_simulator.core.data_models import AttackType, SimulationMetrics
+from cyber_defense_simulator.core.config import Config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -36,13 +38,14 @@ class SimulationConfig(BaseModel):
     quick_test: bool = False
 
 
-# CORS middleware
+# CORS middleware - must be added before routes
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Global state
@@ -60,10 +63,36 @@ agent_logs: Dict[str, deque] = {
     "orchestrator": deque(maxlen=1000),
 }
 
+# Context variable for current simulation_id (works across async boundaries)
+_simulation_context_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('simulation_id', default=None)
+
+# Thread-local storage for executor threads (when run_in_executor is used)
+_simulation_thread_local = threading.local()
+
+
+def get_current_simulation_id():
+    """Get the current simulation_id from context variable or thread-local storage"""
+    # First check thread-local (for executor threads)
+    if hasattr(_simulation_thread_local, 'simulation_id'):
+        return _simulation_thread_local.simulation_id
+    # Then check contextvar (for async tasks)
+    try:
+        return _simulation_context_var.get()
+    except LookupError:
+        return None
+
+def set_current_simulation_id(sim_id: Optional[str]):
+    """Set the current simulation_id in both context variable and thread-local storage"""
+    # Set in contextvar (for async)
+    _simulation_context_var.set(sim_id)
+    # Set in thread-local (for executor threads)
+    _simulation_thread_local.simulation_id = sim_id
 
 def create_log_entry(agent: str, level: str, message: str, **kwargs):
     """Helper function to create log entries with unique IDs"""
     import uuid
+    # Get simulation_id from kwargs or thread-local context
+    simulation_id = kwargs.get("simulation_id") or get_current_simulation_id()
     return {
         "id": str(uuid.uuid4()),
         "timestamp": datetime.now().isoformat(),
@@ -74,6 +103,7 @@ def create_log_entry(agent: str, level: str, message: str, **kwargs):
         "module": kwargs.get("module"),
         "funcName": kwargs.get("funcName"),
         "lineno": kwargs.get("lineno"),
+        "simulation_id": simulation_id,
     }
 
 
@@ -84,6 +114,8 @@ class LogHandler(logging.Handler):
         self.agent_name = agent_name
     
     def emit(self, record):
+        # Try to get simulation_id from record's extra data, otherwise use context
+        simulation_id = getattr(record, 'simulation_id', None) or get_current_simulation_id()
         log_entry = create_log_entry(
             agent=self.agent_name,
             level=record.levelname,
@@ -91,6 +123,7 @@ class LogHandler(logging.Handler):
             module=record.module if hasattr(record, 'module') else None,
             funcName=record.funcName if hasattr(record, 'funcName') else None,
             lineno=record.lineno if hasattr(record, 'lineno') else None,
+            simulation_id=simulation_id,
         )
         if self.agent_name in agent_logs:
             agent_logs[self.agent_name].append(log_entry)
@@ -117,21 +150,33 @@ red_team_logger = logging.getLogger("agents.red_team_agent")
 red_team_handler = LogHandler("red_team")
 red_team_handler.setLevel(logging.INFO)
 red_team_logger.addHandler(red_team_handler)
+red_team_logger.setLevel(logging.INFO)
 
 detection_logger = logging.getLogger("agents.detection_agent")
 detection_handler = LogHandler("detection")
 detection_handler.setLevel(logging.INFO)
 detection_logger.addHandler(detection_handler)
+detection_logger.setLevel(logging.INFO)
 
+# RAG agent logger
 rag_logger = logging.getLogger("agents.rag_agent")
 rag_handler = LogHandler("rag")
 rag_handler.setLevel(logging.INFO)
 rag_logger.addHandler(rag_handler)
+rag_logger.setLevel(logging.INFO)
+
+# RAG vector store logger (for ChromaDB queries) - also goes to "rag" logs
+rag_vector_logger = logging.getLogger("rag.vector_store")
+rag_vector_handler = LogHandler("rag")
+rag_vector_handler.setLevel(logging.INFO)
+rag_vector_logger.addHandler(rag_vector_handler)
+rag_vector_logger.setLevel(logging.INFO)
 
 remediation_logger = logging.getLogger("agents.remediation_agent")
 remediation_handler = LogHandler("remediation")
 remediation_handler.setLevel(logging.INFO)
 remediation_logger.addHandler(remediation_handler)
+remediation_logger.setLevel(logging.INFO)
 
 
 @app.on_event("startup")
@@ -140,8 +185,45 @@ async def startup_event():
     global orchestrator
     try:
         logger.info("Initializing Cyber Defense Orchestrator...")
-        orchestrator = CyberDefenseOrchestrator(initialize_kb=True)
+        
+        # Try to load the latest trained RL agent
+        training_results_dir = Path(__file__).parent / "training_results"
+        rl_agent_path = None
+        
+        if training_results_dir.exists():
+            # Find the most recent training result
+            result_dirs = sorted(training_results_dir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
+            for result_dir in result_dirs:
+                potential_agent = result_dir / "rl_agent.pkl"
+                if potential_agent.exists():
+                    rl_agent_path = potential_agent
+                    logger.info(f"Found trained RL agent: {rl_agent_path}")
+                    break
+        
+        orchestrator = CyberDefenseOrchestrator(
+            initialize_kb=True,
+            rl_agent_path=rl_agent_path
+        )
         logger.info("Orchestrator initialized successfully")
+        
+        # Log RL agent status
+        if rl_agent_path:
+            rl_stats = orchestrator.rl_agent.get_statistics()
+            log_entry = create_log_entry(
+                agent="orchestrator",
+                level="INFO",
+                message=f"Loaded trained RL agent: {rl_stats['episode_count']} episodes, "
+                       f"{rl_stats['num_states']} states, epsilon={rl_stats['epsilon']:.4f}, "
+                       f"avg_q={rl_stats['avg_q_value']:.4f}"
+            )
+            agent_logs["orchestrator"].append(log_entry)
+        else:
+            log_entry = create_log_entry(
+                agent="orchestrator",
+                level="INFO",
+                message="Using new (untrained) RL agent"
+            )
+            agent_logs["orchestrator"].append(log_entry)
         
         # Log knowledge base status
         doc_count = orchestrator.vector_store.get_document_count()
@@ -169,9 +251,33 @@ async def startup_event():
         agent_logs["orchestrator"].append(log_entry)
 
 
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Handle OPTIONS requests for CORS preflight"""
+    return JSONResponse(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
+
 @app.get("/")
 async def root():
     return {"message": "Cyber Defense Simulator API", "status": "running"}
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "orchestrator_initialized": orchestrator is not None,
+        "episodes_count": len(orchestrator.episodes) if orchestrator else 0,
+        "active_simulations": len([s for s in active_simulations.values() if s['status'] == 'running']),
+        "timestamp": datetime.now().isoformat()
+    }
 
 
 @app.get("/api/dashboard/stats")
@@ -286,7 +392,9 @@ async def start_simulation(config: SimulationConfig, background_tasks: Backgroun
         if orchestrator is None:
             raise HTTPException(status_code=503, detail="Orchestrator not initialized")
         
-        sim_id = f"sim_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # Generate unique simulation ID - each simulation gets its own ID
+        # All logs from this simulation will be grouped together in one log stream
+        sim_id = f"sim_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         
         # Parse attack types
         attack_types = None
@@ -309,7 +417,8 @@ async def start_simulation(config: SimulationConfig, background_tasks: Backgroun
         log_entry = create_log_entry(
             agent="orchestrator",
             level="INFO",
-            message=f"Starting simulation {sim_id} with {config.num_episodes} episodes"
+            message=f"Starting simulation {sim_id} with {config.num_episodes} episodes",
+            simulation_id=sim_id
         )
         agent_logs["orchestrator"].append(log_entry)
         
@@ -333,6 +442,8 @@ async def start_simulation(config: SimulationConfig, background_tasks: Backgroun
 
 async def run_simulation_background(sim_id: str, num_episodes: int, attack_types: Optional[List[AttackType]]):
     """Run simulation in background with progress tracking"""
+    # Set simulation context for this thread
+    set_current_simulation_id(sim_id)
     try:
         logger.info(f"Starting background simulation {sim_id}")
         print(f"[API] Starting background simulation {sim_id}")  # Debug output
@@ -341,7 +452,8 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
         log_entry = create_log_entry(
             agent="orchestrator",
             level="INFO",
-            message=f"Simulation {sim_id} started - {num_episodes} episodes"
+            message=f"Simulation {sim_id} started - {num_episodes} episodes",
+            simulation_id=sim_id
         )
         agent_logs["orchestrator"].append(log_entry)
         
@@ -365,26 +477,40 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
                 log_entry = create_log_entry(
                     agent="orchestrator",
                     level="INFO",
-                    message=f"Starting episode {episode_num}/{num_episodes}"
+                    message=f"Starting episode {episode_num}/{num_episodes}",
+                    simulation_id=sim_id
                 )
                 agent_logs["orchestrator"].append(log_entry)
                 
                 # Run episode (run in executor to avoid blocking async event loop)
+                # We need to set simulation_id in the executor thread so agent logs get tagged
+                def run_episode_with_simulation_context():
+                    # Set simulation context in this thread (keep it for entire simulation)
+                    set_current_simulation_id(sim_id)
+                    try:
+                        print(f"[API] Running episode {episode_num}/{num_episodes} for simulation {sim_id}")
+                        episode = orchestrator.run_episode(
+                            episode_number=initial_episode_count + episode_num,
+                            attack_type=attack_type
+                        )
+                        print(f"[API] Episode {episode_num} completed successfully")
+                        return episode
+                    except Exception as e:
+                        import traceback
+                        print(f"[API] Episode {episode_num} failed with error: {e}")
+                        print(f"[API] Traceback: {traceback.format_exc()}")
+                        raise
+                
                 loop = asyncio.get_event_loop()
-                episode = await loop.run_in_executor(
-                    None,
-                    lambda: orchestrator.run_episode(
-                        episode_number=initial_episode_count + episode_num,
-                        attack_type=attack_type
-                    )
-                )
+                episode = await loop.run_in_executor(None, run_episode_with_simulation_context)
                 
                 # Log agent activities from episode
                 if episode.attack_scenario:
                     log_entry = create_log_entry(
                         agent="red_team",
                         level="INFO",
-                        message=f"Red Team generated {episode.attack_scenario.attack_type.value} attack with {len(episode.attack_scenario.steps)} steps"
+                        message=f"Red Team generated {episode.attack_scenario.attack_type.value} attack with {len(episode.attack_scenario.steps)} steps",
+                        simulation_id=sim_id
                     )
                     agent_logs["red_team"].append(log_entry)
                 
@@ -392,15 +518,46 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
                     log_entry = create_log_entry(
                         agent="detection",
                         level="INFO",
-                        message=f"Detection agent identified {episode.incident_report.severity.value} severity incident (confidence: {episode.incident_report.confidence:.2f})"
+                        message=f"Detection agent identified {episode.incident_report.severity.value} severity incident (confidence: {episode.incident_report.confidence:.2f})",
+                        simulation_id=sim_id
                     )
                     agent_logs["detection"].append(log_entry)
                 
                 if episode.rag_context:
+                    # Create detailed retrieval message
+                    retrieval_parts = []
+                    retrieval_parts.append(f"RAG agent retrieved {len(episode.rag_context.runbooks)} runbooks and {len(episode.rag_context.threat_intel)} threat intel items")
+                    
+                    if episode.rag_context.runbooks:
+                        retrieval_parts.append("\n📚 RUNBOOKS:")
+                        for idx, runbook in enumerate(episode.rag_context.runbooks, 1):
+                            retrieval_parts.append(f"  [{idx}] {runbook.title} (ID: {runbook.runbook_id})")
+                            retrieval_parts.append(f"      Techniques: {', '.join(runbook.applicable_techniques) if runbook.applicable_techniques else 'N/A'}")
+                            retrieval_parts.append(f"      Description: {runbook.description[:300]}..." if len(runbook.description) > 300 else f"      Description: {runbook.description}")
+                            if runbook.procedures:
+                                retrieval_parts.append(f"      Procedures ({len(runbook.procedures)} steps): {', '.join(runbook.procedures[:3])}" + ("..." if len(runbook.procedures) > 3 else ""))
+                    
+                    if episode.rag_context.threat_intel:
+                        retrieval_parts.append("\n🎯 THREAT INTELLIGENCE:")
+                        for idx, intel in enumerate(episode.rag_context.threat_intel, 1):
+                            retrieval_parts.append(f"  [{idx}] {intel.source} (Relevance: {intel.relevance_score:.4f})")
+                            content_preview = intel.content[:300] + "..." if len(intel.content) > 300 else intel.content
+                            retrieval_parts.append(f"      Content: {content_preview}")
+                            if intel.metadata.get('technique_id'):
+                                retrieval_parts.append(f"      MITRE: {intel.metadata.get('technique_id')}")
+                    
+                    if episode.rag_context.similar_incidents:
+                        retrieval_parts.append(f"\n📋 SIMILAR INCIDENTS: {len(episode.rag_context.similar_incidents)} found")
+                        for idx, incident in enumerate(episode.rag_context.similar_incidents[:2], 1):
+                            retrieval_parts.append(f"  [{idx}] {incident.get('incident_id', 'N/A')} (Similarity: {incident.get('similarity_score', 0):.4f})")
+                    
+                    detailed_message = "\n".join(retrieval_parts)
+                    
                     log_entry = create_log_entry(
                         agent="rag",
                         level="INFO",
-                        message=f"RAG agent retrieved {len(episode.rag_context.runbooks)} runbooks and {len(episode.rag_context.threat_intel)} threat intel items"
+                        message=detailed_message,
+                        simulation_id=sim_id
                     )
                     agent_logs["rag"].append(log_entry)
                 
@@ -408,7 +565,8 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
                     log_entry = create_log_entry(
                         agent="remediation",
                         level="INFO",
-                        message=f"Remediation agent generated {len(episode.remediation_plan.options)} action options, recommended: {episode.remediation_plan.recommended_action.value if episode.remediation_plan.recommended_action else 'none'}"
+                        message=f"Remediation agent generated {len(episode.remediation_plan.options)} action options, recommended: {episode.remediation_plan.recommended_action.value if episode.remediation_plan.recommended_action else 'none'}",
+                        simulation_id=sim_id
                     )
                     agent_logs["remediation"].append(log_entry)
                 
@@ -416,7 +574,8 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
                     log_entry = create_log_entry(
                         agent="rl_agent",
                         level="INFO",
-                        message=f"RL agent selected action: {episode.rl_decision.selected_action.value} ({'exploration' if episode.rl_decision.is_exploration else 'exploitation'})"
+                        message=f"RL agent selected action: {episode.rl_decision.selected_action.value} ({'exploration' if episode.rl_decision.is_exploration else 'exploitation'})",
+                        simulation_id=sim_id
                     )
                     agent_logs["rl_agent"].append(log_entry)
                 
@@ -440,13 +599,28 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
                 logger.info(f"Episode {episode_num}/{num_episodes} completed for simulation {sim_id}")
                 
             except Exception as e:
+                import traceback
+                error_trace = traceback.format_exc()
                 logger.error(f"Error in episode {episode_num} of simulation {sim_id}: {e}")
+                logger.error(f"Traceback: {error_trace}")
+                print(f"[API ERROR] Episode {episode_num} failed: {e}")
+                print(f"[API ERROR] Traceback: {error_trace}")
+                
                 log_entry = create_log_entry(
                     agent="orchestrator",
                     level="ERROR",
-                    message=f"Error in episode {episode_num}: {str(e)}"
+                    message=f"Error in episode {episode_num}: {str(e)}\n\nTraceback:\n{error_trace[:500]}",
+                    simulation_id=sim_id
                 )
                 agent_logs["orchestrator"].append(log_entry)
+                
+                # Don't continue if too many errors
+                if episode_num > 1:
+                    failed_count = sum(1 for ep in orchestrator.episodes 
+                                     if ep.episode_number > initial_episode_count and not ep.outcome)
+                    if failed_count > num_episodes * 0.5:  # More than 50% failed
+                        logger.error(f"Too many failed episodes ({failed_count}), stopping simulation")
+                        break
                 continue
         
         # Calculate final metrics
@@ -484,21 +658,32 @@ async def run_simulation_background(sim_id: str, num_episodes: int, attack_types
         log_entry = create_log_entry(
             agent="orchestrator",
             level="INFO",
-            message=f"Simulation {sim_id} completed - {successful}/{len(final_episodes)} successful"
+            message=f"Simulation {sim_id} completed - {successful}/{len(final_episodes)} successful",
+            simulation_id=sim_id
         )
         agent_logs["orchestrator"].append(log_entry)
         
         logger.info(f"Simulation {sim_id} completed")
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         logger.error(f"Error in background simulation {sim_id}: {e}")
+        logger.error(f"Traceback: {error_trace}")
+        print(f"[API ERROR] Simulation {sim_id} failed: {e}")
+        print(f"[API ERROR] Traceback: {error_trace}")
+        
         if sim_id in active_simulations:
             active_simulations[sim_id]["status"] = "failed"
         log_entry = create_log_entry(
             agent="orchestrator",
             level="ERROR",
-            message=f"Simulation {sim_id} failed: {str(e)}"
+            message=f"Simulation {sim_id} failed: {str(e)}\n\nTraceback:\n{error_trace[:1000]}",
+            simulation_id=sim_id
         )
         agent_logs["orchestrator"].append(log_entry)
+    finally:
+        # Clear simulation context
+        set_current_simulation_id(None)
 
 
 @app.get("/api/simulations/{simulation_id}/status")
@@ -599,7 +784,35 @@ async def get_episode_details(episode_number: int):
             "selected_action": episode.rl_decision.selected_action.value if episode.rl_decision else None,
             "is_exploration": episode.rl_decision.is_exploration if episode.rl_decision else False,
             "epsilon": episode.rl_decision.epsilon if episode.rl_decision else 0,
+            "q_values": episode.rl_decision.q_values if episode.rl_decision else {},
+            "state": {
+                "incident_severity": episode.rl_decision.state.incident_severity.value if episode.rl_decision and episode.rl_decision.state else None,
+                "attack_type": episode.rl_decision.state.attack_type.value if episode.rl_decision and episode.rl_decision.state else None,
+                "confidence_level": episode.rl_decision.state.confidence_level if episode.rl_decision and episode.rl_decision.state else None,
+            } if episode.rl_decision else None,
         },
+        "rag_context": {
+            "runbooks": [
+                {
+                    "runbook_id": rb.runbook_id,
+                    "title": rb.title,
+                    "description": rb.description,
+                    "applicable_techniques": rb.applicable_techniques,
+                    "procedures": rb.procedures,
+                }
+                for rb in (episode.rag_context.runbooks if episode.rag_context else [])
+            ],
+            "threat_intel": [
+                {
+                    "source": ti.source,
+                    "content": ti.content,
+                    "relevance_score": ti.relevance_score,
+                    "metadata": ti.metadata,
+                }
+                for ti in (episode.rag_context.threat_intel if episode.rag_context else [])
+            ],
+            "similar_incidents": episode.rag_context.similar_incidents if episode.rag_context else [],
+        } if episode.rag_context else None,
         "outcome": {
             "success": episode.outcome.success if episode.outcome else False,
             "false_positive": episode.outcome.false_positive if episode.outcome else False,
@@ -756,6 +969,7 @@ async def get_rl_metrics():
                 "num_states": rl_stats["num_states"],
                 "avg_q_value": float(rl_stats["avg_q_value"]),
                 "current_epsilon": float(rl_stats["epsilon"]),
+                "is_learning": bool(rl_stats["update_count"] > 0),  # Explicitly convert to bool
             },
             "action_distribution": {
                 action.replace("_", " ").title(): count
@@ -782,6 +996,7 @@ async def get_analytics(range: str = "24h"):
             "episodes": [],
             "rewards": [],
             "actions": [],
+            "performance_metrics": [],
         }
     
     try:
@@ -793,6 +1008,7 @@ async def get_analytics(range: str = "24h"):
                 "episodes": [],
                 "rewards": [],
                 "actions": [],
+                "performance_metrics": [],
             }
         
         # REAL reward data
@@ -831,11 +1047,54 @@ async def get_analytics(range: str = "24h"):
             for k, v in attack_type_stats.items()
         ]
         
+        # Calculate time-series metrics for performance chart
+        # Group episodes by time buckets (hourly)
+        from collections import defaultdict
+        from datetime import datetime, timedelta
+        
+        time_series_data = defaultdict(lambda: {"rewards": [], "successes": 0, "detections": 0, "total": 0})
+        
+        for ep in episodes:
+            if ep.start_time:
+                # Round to nearest hour
+                hour_key = ep.start_time.replace(minute=0, second=0, microsecond=0)
+                time_series_data[hour_key]["total"] += 1
+                if ep.reward:
+                    time_series_data[hour_key]["rewards"].append(ep.reward.reward)
+                if ep.outcome and ep.outcome.success:
+                    time_series_data[hour_key]["successes"] += 1
+                if ep.incident_report and ep.incident_report.confidence > 0.5:
+                    time_series_data[hour_key]["detections"] += 1
+        
+        # Convert to chart format
+        performance_metrics = []
+        sorted_times = sorted(time_series_data.keys())
+        
+        # Get last 6 hours or all available data
+        now = datetime.now()
+        cutoff_time = now - timedelta(hours=6)
+        filtered_times = [t for t in sorted_times if t >= cutoff_time]
+        
+        for time_key in filtered_times[-7:]:  # Last 7 data points
+            data = time_series_data[time_key]
+            avg_reward = sum(data["rewards"]) / len(data["rewards"]) if data["rewards"] else 0.0
+            success_rate = data["successes"] / data["total"] if data["total"] > 0 else 0.0
+            detection_rate = data["detections"] / data["total"] if data["total"] > 0 else 0.0
+            
+            # Normalize reward to 0-1 range for chart (from -1,1 range)
+            performance_metrics.append({
+                "time": time_key.strftime("%H:%M"),
+                "reward": max(0, min(1, (avg_reward + 1) / 2)),  # Normalize from -1,1 to 0,1
+                "success": success_rate,
+                "detection": detection_rate
+            })
+        
         return {
             "episodes": reward_data,
             "rewards": reward_data,
             "actions": [{"name": k, "value": v} for k, v in action_counts.items()],
             "attackTypes": attack_type_data,
+            "performance_metrics": performance_metrics,  # Add time-series data
         }
     except Exception as e:
         logger.error(f"Error getting analytics: {e}")
@@ -843,6 +1102,7 @@ async def get_analytics(range: str = "24h"):
             "episodes": [],
             "rewards": [],
             "actions": [],
+            "performance_metrics": [],
         }
 
 

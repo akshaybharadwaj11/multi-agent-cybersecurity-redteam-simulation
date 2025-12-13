@@ -8,14 +8,21 @@ import Analytics from './pages/Analytics'
 import EpisodeDetail from './pages/EpisodeDetail'
 import Logs from './pages/Logs'
 import RLMetrics from './pages/RLMetrics'
+import Orchestration from './pages/Orchestration'
 
 function App() {
   try {
     return (
-      <Router>
+      <Router
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <Layout>
           <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/orchestration" element={<Orchestration />} />
           <Route path="/simulations" element={<Simulations />} />
           <Route path="/agents" element={<Agents />} />
           <Route path="/analytics" element={<Analytics />} />

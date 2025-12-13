@@ -9,7 +9,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import logging
 
-from core.config import Config
+from cyber_defense_simulator.core.config import Config
 
 logger = logging.getLogger(__name__)
 

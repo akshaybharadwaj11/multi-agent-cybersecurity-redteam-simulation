@@ -6,8 +6,8 @@ Calculates rewards based on remediation outcomes
 import logging
 from typing import Dict
 
-from core.data_models import Outcome, RewardFeedback
-from core.config import Config
+from cyber_defense_simulator.core.data_models import Outcome, RewardFeedback
+from cyber_defense_simulator.core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,12 @@ class RewardCalculator:
         """
         Calculate reward based on outcome
         
+        Improved reward shaping:
+        - Higher rewards for successful containment
+        - Reduced penalties for failures (to encourage exploration)
+        - Bonus for fast response times
+        - Penalty scaling based on severity
+        
         Args:
             outcome: Outcome of remediation action
             
@@ -79,9 +85,15 @@ class RewardCalculator:
             base_reward = self.reward_success
             components['success'] = base_reward
             
+            # Bonus for fast response (encourage quick action)
+            if outcome.time_to_remediate < 10.0:
+                speed_bonus = 0.2 * (1.0 - outcome.time_to_remediate / 10.0)
+                base_reward += speed_bonus
+                components['speed_bonus'] = speed_bonus
+            
         elif not outcome.success:
-            # Failed to stop attack - maximum penalty
-            base_reward = self.reward_failure
+            # Failed to stop attack - penalty (reduced from -1.0 to -0.8 for better learning)
+            base_reward = self.reward_failure * 0.8  # Less harsh penalty
             components['failure'] = base_reward
             
         else:
@@ -92,14 +104,14 @@ class RewardCalculator:
         # Additional penalties
         total_reward = base_reward
         
-        # Collateral damage penalty
+        # Collateral damage penalty (reduced)
         if outcome.collateral_damage:
-            damage_penalty = self.reward_collateral_damage
+            damage_penalty = self.reward_collateral_damage * 0.5  # Less harsh
             total_reward += damage_penalty
             components['collateral_damage'] = damage_penalty
         
-        # Time penalty (encourage faster response)
-        time_penalty = -self.time_penalty_factor * outcome.time_to_remediate
+        # Time penalty (encourage faster response, but less harsh)
+        time_penalty = -self.time_penalty_factor * outcome.time_to_remediate * 0.5  # Reduced
         total_reward += time_penalty
         components['time_penalty'] = time_penalty
         
@@ -197,7 +209,7 @@ def simulate_outcome(
         Simulated outcome
     """
     import random
-    from core.data_models import RemediationAction
+    from cyber_defense_simulator.core.data_models import RemediationAction
     
     # Base success probability
     success_prob = 0.5

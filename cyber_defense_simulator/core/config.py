@@ -39,12 +39,12 @@ class Config:
     # ========================================================================
     # RL Configuration
     # ========================================================================
-    RL_LEARNING_RATE: float = float(os.getenv("RL_LEARNING_RATE", "0.1"))
-    RL_EPSILON: float = float(os.getenv("RL_EPSILON", "0.1"))
-    RL_EPSILON_DECAY: float = float(os.getenv("RL_EPSILON_DECAY", "0.995"))
-    RL_MIN_EPSILON: float = float(os.getenv("RL_MIN_EPSILON", "0.01"))
+    RL_LEARNING_RATE: float = float(os.getenv("RL_LEARNING_RATE", "0.05"))  # Reduced from 0.1 for stability
+    RL_EPSILON: float = float(os.getenv("RL_EPSILON", "0.2"))  # Increased from 0.1 for more exploration
+    RL_EPSILON_DECAY: float = float(os.getenv("RL_EPSILON_DECAY", "0.998"))  # Slower decay for more exploration
+    RL_MIN_EPSILON: float = float(os.getenv("RL_MIN_EPSILON", "0.15"))  # Higher min for continued exploration (increased from 0.05)
     RL_DISCOUNT_FACTOR: float = float(os.getenv("RL_DISCOUNT_FACTOR", "0.95"))
-    RL_Q_INIT: float = float(os.getenv("RL_Q_INIT", "0.0"))
+    RL_Q_INIT: float = float(os.getenv("RL_Q_INIT", "0.1"))  # Optimistic initialization (was 0.0)
     
     # ========================================================================
     # Simulation Configuration

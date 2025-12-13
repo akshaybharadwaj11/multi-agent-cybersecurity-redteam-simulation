@@ -49,6 +49,7 @@ const Logs = () => {
       {view === 'streams' ? (
         <LogStreams 
           onStreamSelect={(streamId) => {
+            console.log('[Logs] Stream selected:', streamId)
             setSelectedStreamId(streamId)
             setView('logs')
           }}
@@ -57,7 +58,8 @@ const Logs = () => {
         <AgentLogs 
           agent={null} 
           autoRefresh={true}
-          filterByLogId={selectedStreamId}
+          filterBySimulationId={selectedStreamId}
+          key={selectedStreamId || 'all'} // Force re-render when filter changes
         />
       )}
     </div>

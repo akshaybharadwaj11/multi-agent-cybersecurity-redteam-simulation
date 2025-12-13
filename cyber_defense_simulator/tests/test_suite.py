@@ -15,15 +15,15 @@ from core.orchestrator import CyberDefenseOrchestrator
 from core.data_models import (
     AttackType, SeverityLevel, RemediationAction, State
 )
-from rag.vector_store import InMemoryVectorStore
-from rag.knowledge_base import KnowledgeBase
-from agents.red_team_agent import RedTeamAgent
-from agents.detection_agent import DetectionAgent
-from agents.rag_agent import RAGAgent
-from agents.remediation_agent import RemediationAgent
-from simulation.telemetry_generator import TelemetryGenerator
-from rl.contextual_bandit import ContextualBandit
-from rl.reward_calculator import RewardCalculator, simulate_outcome
+from cyber_defense_simulator.rag.vector_store import InMemoryVectorStore
+from cyber_defense_simulator.rag.knowledge_base import KnowledgeBase
+from cyber_defense_simulator.agents.red_team_agent import RedTeamAgent
+from cyber_defense_simulator.agents.detection_agent import DetectionAgent
+from cyber_defense_simulator.agents.rag_agent import RAGAgent
+from cyber_defense_simulator.agents.remediation_agent import RemediationAgent
+from cyber_defense_simulator.simulation.telemetry_generator import TelemetryGenerator
+from cyber_defense_simulator.rl.contextual_bandit import ContextualBandit
+from cyber_defense_simulator.rl.reward_calculator import RewardCalculator, simulate_outcome
 
 
 class TestRedTeamAgent:

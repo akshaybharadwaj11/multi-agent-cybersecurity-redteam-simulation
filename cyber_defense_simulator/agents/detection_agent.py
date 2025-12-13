@@ -10,10 +10,10 @@ import logging
 from datetime import datetime
 import re
 
-from core.data_models import (
+from cyber_defense_simulator.core.data_models import (
     TelemetryData, IncidentReport, Anomaly, SeverityLevel, AttackType
 )
-from core.config import Config
+from cyber_defense_simulator.core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,8 @@ class DetectionAgent:
             framework and can map observed activities to specific techniques.""",
             verbose=Config.CREW_VERBOSE,
             allow_delegation=False,
-            llm=Config.get_llm()
+            llm=Config.get_llm(),
+            memory=False  # Disable memory to prevent response caching
         )
         
         # Detection rules for quick filtering
