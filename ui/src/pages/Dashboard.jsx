@@ -33,8 +33,35 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadData()
-    const interval = setInterval(loadData, 3000) // Refresh every 3 seconds for real-time updates
-    return () => clearInterval(interval)
+    let interval = null
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Pause polling when tab is hidden
+        if (interval) {
+          clearInterval(interval)
+          interval = null
+        }
+      } else {
+        // Resume polling when tab is visible
+        if (!interval) {
+          loadData() // Load immediately when tab becomes visible
+          interval = setInterval(loadData, 15000)
+        }
+      }
+    }
+    
+    // Start polling only if tab is visible
+    if (!document.hidden) {
+      interval = setInterval(loadData, 15000) // Refresh every 15 seconds
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      if (interval) clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   const loadData = async () => {

@@ -20,7 +20,7 @@ const Simulations = () => {
     // Poll for simulation updates
     const interval = setInterval(() => {
       loadSimulations()
-    }, 3000)
+    }, 15000) // Refresh every 15 seconds
     return () => clearInterval(interval)
   }, [])
 

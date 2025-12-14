@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Brain, TrendingUp, TrendingDown, Activity, Target, Zap, BarChart3, Filter, Award, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { getRLMetrics, getAllSimulations } from '../services/api'
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, AreaChart, Area, ComposedChart, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
 
 const RLMetrics = () => {
   const [metrics, setMetrics] = useState(null)
@@ -18,8 +18,32 @@ const RLMetrics = () => {
 
   useEffect(() => {
     loadMetrics()
-    const interval = setInterval(loadMetrics, 3000) // Refresh every 3 seconds
-    return () => clearInterval(interval)
+    let interval = null
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (interval) {
+          clearInterval(interval)
+          interval = null
+        }
+      } else {
+        if (!interval) {
+          loadMetrics()
+          interval = setInterval(loadMetrics, 15000)
+        }
+      }
+    }
+    
+    if (!document.hidden) {
+      interval = setInterval(loadMetrics, 15000)
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      if (interval) clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [selectedSimulation])
 
   const loadSimulations = async () => {
@@ -679,55 +703,144 @@ const RLMetrics = () => {
       {/* Performance Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Success Rate Over Time */}
-        {successRateData.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.4 }}
-            className="card"
-          >
-            <h2 className="card-title mb-6">Success Rate Over Time</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={successRateData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis 
-                  dataKey="episode" 
-                  stroke="#6b7280"
-                  style={{ fontSize: '12px' }}
-                  type="number"
-                  scale="linear"
-                  allowDecimals={false}
-                  label={{ value: 'Episode', position: 'insideBottom', offset: -5, style: { fill: '#6b7280' } }}
-                />
-                <YAxis 
-                  stroke="#6b7280"
-                  style={{ fontSize: '12px' }}
-                  domain={[0, 100]}
-                  tickFormatter={(value) => `${value}%`}
-                  label={{ value: 'Success Rate (%)', angle: -90, position: 'insideLeft', style: { fill: '#6b7280' } }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#fff', 
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px'
-                  }}
-                  formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Success Rate']}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="successRate" 
-                  stroke="#10b981" 
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: '#10b981' }}
-                  activeDot={{ r: 5 }}
-                  name="Success Rate (%)" 
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </motion.div>
-        )}
+        {successRateData.length > 0 && (() => {
+          // Calculate average success rate for reference line
+          const avgSuccessRate = successRateData.reduce((sum, d) => sum + d.successRate, 0) / successRateData.length
+          const maxEpisode = Math.max(...successRateData.map(d => d.episode))
+          const minEpisode = Math.min(...successRateData.map(d => d.episode))
+          
+          // Calculate trend line data (moving average for smoother trend)
+          const windowSize = Math.max(3, Math.floor(successRateData.length / 5))
+          const trendData = successRateData.map((item, index) => {
+            const start = Math.max(0, index - Math.floor(windowSize / 2))
+            const end = Math.min(successRateData.length, index + Math.ceil(windowSize / 2))
+            const window = successRateData.slice(start, end)
+            const avg = window.reduce((sum, d) => sum + d.successRate, 0) / window.length
+            return { ...item, trend: avg }
+          })
+          
+          // Color bars based on performance relative to average
+          const getBarColor = (value) => {
+            if (value >= avgSuccessRate * 1.1) return '#10b981' // Well above average
+            if (value >= avgSuccessRate) return '#34d399' // Above average
+            if (value >= avgSuccessRate * 0.9) return '#fbbf24' // Slightly below average
+            return '#f87171' // Below average
+          }
+          
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.4 }}
+              className="card"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="card-title mb-0">Success Rate Over Time</h2>
+                <div className="text-sm text-gray-600">
+                  <span className="font-semibold">Avg: </span>
+                  <span className="font-bold text-green-600">{avgSuccessRate.toFixed(1)}%</span>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={350}>
+                <ComposedChart 
+                  data={trendData} 
+                  margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
+                >
+                  <defs>
+                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.8}/>
+                      <stop offset="100%" stopColor="#10b981" stopOpacity={0.4}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+                  <XAxis 
+                    dataKey="episode" 
+                    stroke="#6b7280"
+                    style={{ fontSize: '12px' }}
+                    type="number"
+                    scale="linear"
+                    domain={[minEpisode, maxEpisode]}
+                    allowDecimals={false}
+                    tickCount={Math.min(8, maxEpisode - minEpisode + 1)}
+                    label={{ value: 'Episode', position: 'insideBottom', offset: -5, style: { fill: '#6b7280', fontSize: '13px', fontWeight: 500 } }}
+                  />
+                  <YAxis 
+                    stroke="#6b7280"
+                    style={{ fontSize: '12px' }}
+                    domain={[0, 100]}
+                    tickFormatter={(value) => `${value}%`}
+                    label={{ value: 'Success Rate (%)', angle: -90, position: 'insideLeft', style: { fill: '#6b7280', fontSize: '13px', fontWeight: 500 } }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#fff', 
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      padding: '10px'
+                    }}
+                    formatter={(value, name) => {
+                      if (name === 'successRate') return [`${Number(value).toFixed(1)}%`, 'Success Rate']
+                      if (name === 'trend') return [`${Number(value).toFixed(1)}%`, 'Trend Line']
+                      return [value, name]
+                    }}
+                    labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
+                  />
+                  <ReferenceLine 
+                    y={avgSuccessRate} 
+                    stroke="#6b7280" 
+                    strokeDasharray="5 5" 
+                    strokeWidth={1.5}
+                    opacity={0.6}
+                    label={{ value: `Avg: ${avgSuccessRate.toFixed(1)}%`, position: 'right', style: { fill: '#6b7280', fontSize: '11px' } }}
+                  />
+                  <Bar 
+                    dataKey="successRate" 
+                    radius={[4, 4, 0, 0]}
+                    name="Success Rate (%)"
+                  >
+                    {trendData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={getBarColor(entry.successRate)} />
+                    ))}
+                  </Bar>
+                  <Line 
+                    type="monotone" 
+                    dataKey="trend" 
+                    stroke="#3b82f6" 
+                    strokeWidth={3}
+                    dot={false}
+                    activeDot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+                    name="Trend Line"
+                    strokeDasharray="0"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span>Current: {successRateData[successRateData.length - 1]?.successRate.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span>Peak: {Math.max(...successRateData.map(d => d.successRate)).toFixed(1)}%</span>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-3 h-3 rounded bg-green-500"></div>
+                    <span>Above Avg</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-3 h-3 rounded bg-yellow-400"></div>
+                    <span>Below Avg</span>
+                  </div>
+                </div>
+                <span>Episodes: {minEpisode} - {maxEpisode}</span>
+              </div>
+            </motion.div>
+          )
+        })()}
 
         {/* Reward Trend Over Time */}
         {rewardTrendData.length > 0 && (

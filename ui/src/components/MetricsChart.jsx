@@ -19,7 +19,7 @@ const MetricsChart = () => {
 
   useEffect(() => {
     loadMetrics()
-    const interval = setInterval(loadMetrics, 5000) // Refresh every 5 seconds
+    const interval = setInterval(loadMetrics, 15000) // Refresh every 15 seconds
     return () => clearInterval(interval)
   }, [])
 
