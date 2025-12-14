@@ -210,3 +210,6 @@ outputs/
 .DS_Store
 .env
 simulation.log
+*.pid
+api_server.pid
+ui_server.pid

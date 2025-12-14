@@ -34,7 +34,7 @@ const AgentLogs = ({ agent = null, autoRefresh = true, filterByLogId = null, fil
   useEffect(() => {
     loadLogs()
     if (autoRefresh) {
-      const interval = setInterval(loadLogs, 2000)
+      const interval = setInterval(loadLogs, 15000) // Refresh every 15 seconds
       return () => clearInterval(interval)
     }
   }, [selectedAgent, autoRefresh, filterBySimulationId])

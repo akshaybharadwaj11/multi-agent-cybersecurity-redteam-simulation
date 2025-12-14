@@ -71,7 +71,7 @@ const Agents = () => {
 
   useEffect(() => {
     loadAgentStatus()
-    const interval = setInterval(loadAgentStatus, 3000)
+    const interval = setInterval(loadAgentStatus, 15000) // Refresh every 15 seconds
     return () => clearInterval(interval)
   }, [])
 

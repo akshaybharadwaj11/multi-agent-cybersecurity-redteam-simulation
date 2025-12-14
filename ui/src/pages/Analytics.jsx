@@ -23,8 +23,32 @@ const Analytics = () => {
 
   useEffect(() => {
     loadAnalytics()
-    const interval = setInterval(loadAnalytics, 5000)
-    return () => clearInterval(interval)
+    let interval = null
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (interval) {
+          clearInterval(interval)
+          interval = null
+        }
+      } else {
+        if (!interval) {
+          loadAnalytics()
+          interval = setInterval(loadAnalytics, 15000)
+        }
+      }
+    }
+    
+    if (!document.hidden) {
+      interval = setInterval(loadAnalytics, 15000)
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      if (interval) clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [timeRange])
 
   const loadAnalytics = async () => {

@@ -14,7 +14,7 @@ const LogStreams = ({ onStreamSelect = null }) => {
 
   useEffect(() => {
     loadLogs()
-    const interval = setInterval(loadLogs, 5000) // Refresh every 5 seconds
+    const interval = setInterval(loadLogs, 15000) // Refresh every 15 seconds
     return () => clearInterval(interval)
   }, [])
 
